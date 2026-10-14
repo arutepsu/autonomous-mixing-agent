@@ -1,0 +1,25 @@
+# Local environment / secrets
+.venv/
+.env
+.env.*
+!.env.example
+
+# Python / tooling caches and build output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Generated experiment data and outputs (never commit stems or results by default)
+data/*
+!data/.gitkeep
+results/
+
+# OS files
+Thumbs.db
+.DS_Store

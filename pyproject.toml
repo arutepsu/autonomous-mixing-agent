@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autonomous-mixing-agent"
+version = "0.1.0"
+description = "Research prototype for autonomous detection and correction of mixing problems"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "scipy>=1.11", "soundfile>=0.12"]
+
+[project.optional-dependencies]
+agent = ["anthropic>=0.60", "pydantic>=2"]
+
+[project.scripts]
+mixing-agent = "mixing_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# ruff defaults plus import sorting; pinned here so results do not depend on user-level ruff config.
+select = ["E4", "E7", "E9", "F", "I"]

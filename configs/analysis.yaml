@@ -1,0 +1,6 @@
+# Proposed parameter manifest (M0 runner currently uses documented fixed defaults)
+sample_rate_policy: require_matching
+stft_frame_length: 2048
+stft_hop_length: 512
+low_band_hz: [30, 200]
+coactivity_relative_threshold: 0.1
