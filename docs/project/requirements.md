@@ -33,7 +33,7 @@ Status: **planned** unless stated as M0 implemented. Requirements labeled `targe
 - Synthetic regression tests pass.
 - Values are documented as descriptive measurements, not validated defect detection.
 
-Status 2026-10-14: criteria 1–4 are met (17 tests pass; see `research-log.md`). The roadmap exit condition "reproducible feature report" additionally requires the FR-12 metadata gaps above to be closed.
+Status 2026-10-14: criteria 1–4 are met (17 tests pass; see `../research/research-log.md`). The roadmap exit condition "reproducible feature report" additionally requires the FR-12 metadata gaps above to be closed.
 
 ## Open questions
 - Sample-rate policy: reject vs resample (decide before datasets are built). M0 currently rejects mismatches as an interim default.

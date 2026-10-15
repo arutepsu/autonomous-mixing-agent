@@ -3,7 +3,7 @@ import json
 import numpy as np
 import soundfile as sf
 
-from mixing_agent.cli import main
+from autonomous_mixing.cli import main
 
 SR = 44100
 

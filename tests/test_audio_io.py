@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from mixing_agent.audio.io import AudioStem, load_stem, validate_pair
+from autonomous_mixing.audio.io import AudioStem, load_stem, validate_pair
 
 
 def test_mismatched_sample_rates_rejected():

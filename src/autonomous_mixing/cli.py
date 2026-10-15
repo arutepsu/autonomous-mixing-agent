@@ -7,7 +7,7 @@ from .audio.analysis import analyze_pair
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="mixing-agent")
+    parser = argparse.ArgumentParser(prog="autonomous-mixing")
     sub = parser.add_subparsers(dest="command", required=True)
     analyze = sub.add_parser("analyze", help="Run deterministic descriptive kick/bass analysis")
     analyze.add_argument("kick")

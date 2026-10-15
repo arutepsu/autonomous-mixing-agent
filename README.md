@@ -1,8 +1,10 @@
-# Autonomous Mixing Agent
+# Autonomous Mixing System
 
 Bachelor thesis research prototype: **Autonomous Detection and Correction of Mixing Problems Using AI Agents**.
 
-**Status:** M0 descriptive kick/bass analyzer; autonomous corrections and perceptual masking detection are **not implemented**. Official project period: 2026-10-19 to 2027-01-18.
+The system detects, corrects and verifies selected technical mixing problems; the AI agent (`decision_agent`, planned) is one decision-making component within it. Naming conventions: [ADR-005](docs/decisions/0005-system-oriented-naming.md).
+
+**Status:** M0 descriptive two-stem analyzer (inputs currently labeled kick/bass, a known deviation under review; see [`docs/architecture/overview.md`](docs/architecture/overview.md)); autonomous corrections and perceptual masking detection are **not implemented**. Official project period: 2026-10-19 to 2027-01-18.
 
 ## Setup (Windows PowerShell)
 
@@ -11,11 +13,12 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first. Thi
 ```powershell
 uv python install 3.11
 uv sync --group dev
-uv run python scripts/generate_test_audio.py
-uv run mixing-agent analyze data/synthetic/kick.wav data/synthetic/bass.wav --output results/analysis.json
+uv run autonomous-mixing --help
 uv run pytest -q
 uv run ruff check .
 ```
+
+These commands validate the installation (package, CLI registration, unit tests, lint). The project does not ship demo audio; see [ADR-006](docs/decisions/0006-research-first-development-policy.md) for the development policy.
 
 `uv.lock` pins the resolved dependency set and should be committed; after changing dependencies run `uv lock` and commit the updated lockfile. Use `uv sync --group dev --locked` to fail instead of silently re-resolving.
 
@@ -23,7 +26,7 @@ Optional future Claude SDK dependencies: `uv sync --group dev --extra agent`. Co
 
 ## CLI
 
-`mixing-agent analyze KICK.wav BASS.wav [--output PATH]` writes a JSON report (default `results/analysis.json`). Invalid or incompatible inputs (missing file, non-WAV container, unreadable file, fewer than 2048 frames, more than two channels, non-finite samples, differing sample rates or frame counts) are reported as a one-line `error: …` message on stderr with exit code 2.
+`autonomous-mixing analyze KICK.wav BASS.wav [--output PATH]` writes a JSON report (default `results/analysis.json`). Invalid or incompatible inputs (missing file, non-WAV container, unreadable file, fewer than 2048 frames, more than two channels, non-finite samples, differing sample rates or frame counts) are reported as a one-line `error: …` message on stderr with exit code 2.
 
 ## Existing measurements and limitations
 
@@ -35,24 +38,24 @@ All values are descriptive measurements, **not** a perceptual masking measuremen
 - Stereo stems are folded to mono (channel mean) before the STFT; phase cancellation in the fold-down is not detected.
 - Synthesized examples do **not** provide perceptual ground truth.
 
-Assumptions behind these parameters are listed in [`docs/methodology.md`](docs/methodology.md#assumptions-requiring-validation).
+Assumptions behind these parameters are listed in [`docs/research/methodology.md`](docs/research/methodology.md#assumptions-requiring-validation).
 
 ## Documentation map
 
-This table is the canonical topic-ownership list; change rules are in `docs/documentation-policy.md`.
+This table is the canonical topic-ownership list; change rules are in [`docs/project/documentation-policy.md`](docs/project/documentation-policy.md).
 
 | File | Authority |
 | --- | --- |
 | `CLAUDE.md` | Claude operating rules and navigation |
-| `docs/project-scope.md` | Research questions, hypotheses, scope and exclusions |
-| `docs/requirements.md` | Functional / nonfunctional requirements and acceptance criteria |
-| `docs/architecture.md` | Current components, boundaries and target architecture |
-| `docs/methodology.md` | Evaluation design and scientific safeguards |
-| `docs/dataset-plan.md` | Audio data creation, metadata and partitioning |
-| `docs/roadmap.md` | Milestones, dates, priorities and exit criteria |
-| `docs/decisions.md` | Append-only architectural decision history |
-| `docs/research-log.md` | Append-only research and implementation observations |
-| `docs/documentation-policy.md` | Which documents may change and how |
+| `docs/research/project-scope.md` | Research questions, hypotheses, scope and exclusions |
+| `docs/project/requirements.md` | Functional / nonfunctional requirements and acceptance criteria |
+| `docs/architecture/overview.md` | Current components, boundaries and target architecture; per-component pages are added to `docs/architecture/` as components are built |
+| `docs/research/methodology.md` | Evaluation design and scientific safeguards |
+| `docs/research/dataset-plan.md` | Audio data creation, metadata and partitioning |
+| `docs/project/roadmap.md` | Milestones, dates, priorities and exit criteria |
+| `docs/decisions/` | Architectural decision records, one immutable file per ADR, indexed in [`docs/decisions/README.md`](docs/decisions/README.md) |
+| `docs/research/research-log.md` | Append-only research and implementation observations |
+| `docs/project/documentation-policy.md` | Which documents may change and how |
 
 ## Current development order
 
@@ -62,4 +65,4 @@ This table is the canonical topic-ownership list; change rules are in `docs/docu
 4. Implement bounded, reversible gain/EQ actions.
 5. Introduce Claude as a structured action *proposer*, never as an audio processing tool.
 
-See `docs/roadmap.md`. No FL Studio `.flp` project manipulation is required for the core experiment.
+See `docs/project/roadmap.md`. No FL Studio `.flp` project manipulation is required for the core experiment.
