@@ -1,6 +1,6 @@
 # Autonomous Mixing System
 
-Bachelor thesis research prototype: **Autonomous Detection and Correction of Mixing Problems Using AI Agents**.
+Bachelor thesis research prototype: **Autonomous Detection and Correction of Mixing Problems Using an AI Agent**.
 
 The system detects, corrects and verifies selected technical mixing problems; the AI agent (`decision_agent`, planned) is one decision-making component within it. Naming conventions: [ADR-005](docs/decisions/0005-system-oriented-naming.md).
 

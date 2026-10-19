@@ -19,7 +19,7 @@
 ## Priority order
 1. Working kick/bass autonomous loop with independent validation and baselines.
 2. Reliable evaluation and thesis writing.
-3. Resonance and stereo/phase extensions only if schedule permits.
+3. Resonance/buildup (P2) and stereo/phase (P3) as planned research targets; P1 end-to-end is the contingency minimum, not a decision to drop P2/P3 (see `../research/project-scope.md`).
 4. DAW integration and UI are optional.
 
 ## Current status

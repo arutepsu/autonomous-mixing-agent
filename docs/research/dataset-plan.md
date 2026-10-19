@@ -20,6 +20,8 @@ For each relevant project: clean/reference condition where defensible, controlle
 ## Leakage prevention
 Partition by underlying musical project, not by rendered variant: all variants from a source project must remain in the same split. Freeze detector thresholds and acceptance criteria before final evaluation.
 
+Hidden-reference boundary (requirements SR-10, ADR-010): the clean/reference condition, any manual correction reference and the `defect_generation` field (injection type, target tracks, parameters, seeds) are hidden evaluation data. They are stored separately from the runtime manifest, never reach controllers, decision inputs or runtime validation, and are joined with run records only after execution for research evaluation. `variant_id` values must not encode injection details.
+
 ## Validity risks
 Injected faults are not automatically real-world mixing problems. Ask whether each example is actually perceptually relevant; do not claim expert ground truth without independent listening/annotation.
 

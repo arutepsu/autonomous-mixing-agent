@@ -23,3 +23,6 @@ results/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Editor workspace files
+Bachelor-Thesis.code-workspace

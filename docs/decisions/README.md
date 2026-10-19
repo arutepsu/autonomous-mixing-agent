@@ -9,8 +9,11 @@ One file per decision, named `NNNN-short-title.md`. Accepted ADRs are not edited
 | [003](0003-documentation-governance.md) | Documentation governance | 2026-10-14 | Accepted; storage of ADRs refined by ADR-007 |
 | [004](0004-single-agent-deterministic-orchestration.md) | Single-agent, deterministic orchestration | 2026-10-14 | Accepted |
 | [005](0005-system-oriented-naming.md) | System-oriented naming | 2026-10-15 | Accepted |
-| [006](0006-research-first-development-policy.md) | Research-first development policy | 2026-10-15 | Accepted |
+| [006](0006-research-first-development-policy.md) | Research-first development policy | 2026-10-15 | Accepted; point 6 clarified by ADR-008 |
 | [007](0007-docs-folder-structure.md) | Documentation folder structure and one file per ADR | 2026-10-15 | Accepted |
+| [008](0008-controlled-defect-injection.md) | Controlled defect injection into real stems | 2026-10-15 | Accepted; recording location refined by ADR-010 |
+| [009](0009-agent-team-implementation-baseline.md) | Development agent team follows the offline Python/WAV baseline | 2026-10-15 | Accepted; hidden-reference item closed by ADR-010 |
+| [010](0010-hidden-reference-boundary.md) | Hidden-reference boundary between runtime and research evaluation | 2026-10-15 | Accepted |
 
 ## Template
 

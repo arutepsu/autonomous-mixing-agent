@@ -1,0 +1,9 @@
+# ADR-009 — development agent team follows the offline Python/WAV baseline (2026-10-15)
+- Decision: the development-assistant roles in `.claude/agents/`, `.codex/agents/` and `agent-team/` use the repository's accepted offline Python/WAV workflow (ADR-001) as the implementation baseline. FL Studio integration is deferred and optional: it is not scheduled, and it is investigated only when the owner explicitly assigns it; adopting it would require a new requirement and ADR. The Source of Truth document (`AI_Mixing_Agent_Project_Source_of_Truth.docx`, v0.1) remains the main reference for the thesis concept; where it differs from accepted ADRs or `requirements.md`, the repository documents govern implementation and the difference is reported, not silently resolved.
+- Source: owner's instruction of 2026-10-15 resolving the scope conflict noted in `agent-team/PROJECT_BRIEF.md`.
+- Rationale: the Source of Truth document proposes an FL Studio prototype with an early read/edit/render/restore milestone, whereas ADR-001, `requirements.md` (FR-14 withdrawn; `.flp` manipulation excluded) and `project-scope.md` set an offline WAV workflow. Assistant roles that followed the document would steer work away from accepted decisions.
+- Consequences:
+  - The roles preserve the thesis invariants: research question, fair controller comparison (SR-01), deterministic validation, bounded actions, abstention, rollback and a hidden evaluation reference.
+  - The roles are development assistants and not part of the runtime mixing system; ADR-004 (single runtime agent, no multi-agent setup) is unaffected.
+  - Remaining substantive differences between the document and the repository (hypotheses, comparison conditions, P2/P3 depth, hidden-reference requirement) stay open and are listed in `agent-team/PROJECT_BRIEF.md`.
+  - Does not change ADR-001 or any requirement; it applies them to the assistant configuration.

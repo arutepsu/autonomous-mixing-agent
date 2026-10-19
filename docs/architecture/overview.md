@@ -10,6 +10,8 @@
 ## Target pipeline (planned)
 Audio I/O -> deterministic features -> detectors -> structured problem candidates -> Claude proposal (`decision_agent`) -> action validator -> DSP execution -> verification -> accept/revert -> experiment report.
 
+Hidden-reference boundary ([ADR-010](../decisions/0010-hidden-reference-boundary.md), requirements SR-10): everything up to accept/revert is runtime and never reads the original reference audio or defect-injection ground truth. Run records hold runtime inputs and the action history. Research evaluation joins them with the separately stored hidden evaluation data only after execution.
+
 ## Implemented (M0)
 M0 implements only Audio I/O -> features -> descriptive JSON report. Do not claim masking detection from overlap measures alone.
 
