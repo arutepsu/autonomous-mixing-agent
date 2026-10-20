@@ -14,11 +14,10 @@ from dataclasses import dataclass
 
 from autonomous_mixing.domain.context import MusicalContext
 from autonomous_mixing.domain.decision import ControllerIdentity, Decision, validate_decision_references
-from autonomous_mixing.domain.execution import ArtifactCheckpoint
 from autonomous_mixing.domain.observation import AnalysisSpec, Observation, validate_observation_sources
-from autonomous_mixing.domain.project import AnalysisScope, ProjectSnapshot
+from autonomous_mixing.domain.project import AnalysisScope, ArtifactCheckpoint, ProjectSnapshot
 from autonomous_mixing.domain.run import BudgetLimits, BudgetUsage
-from autonomous_mixing.domain.values import VersionRef, require_instance, require_tuple_of
+from autonomous_mixing.domain.shared import VersionRef, require_instance, require_tuple_of
 
 
 def _require_unique_observations(observations: tuple[Observation, ...], field: str) -> None:

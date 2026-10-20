@@ -11,43 +11,39 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from autonomous_mixing.domain import (
-    AbsoluteGuard,
-    AnalysisScope,
-    AnalysisSpec,
-    AssertionSource,
-    BaselineReference,
+from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
+from autonomous_mixing.domain.decision import ControllerIdentity
+from autonomous_mixing.domain.observation import AnalysisSpec, MeasuredScalar, RenderSpec
+from autonomous_mixing.domain.project import AnalysisScope, FrequencyRange, ProjectSnapshot, TimeRange, Track
+from autonomous_mixing.domain.run import (
     BudgetLimits,
     BudgetUsage,
-    ComparisonOperator,
-    ConditionId,
-    ContextId,
-    ControllerIdentity,
-    CriteriaId,
-    DeltaGuard,
     FinalProjectState,
-    FrequencyRange,
-    ImprovementCondition,
-    ImprovementDirection,
-    MeasuredScalar,
-    MetricSelector,
-    MusicalContext,
-    ProjectId,
-    ProjectSnapshot,
-    RenderSpec,
-    Revision,
     Run,
     RunConfiguration,
-    RunId,
     RunOutcome,
     RunState,
-    TargetCondition,
-    TimeRange,
-    Track,
+)
+from autonomous_mixing.domain.shared import (
+    ConditionId,
+    ContextId,
+    CriteriaId,
+    ProjectId,
+    Revision,
+    RunId,
     TrackId,
-    TrackRole,
-    ValidationCriteria,
     VersionRef,
+)
+from autonomous_mixing.domain.validation import (
+    AbsoluteGuard,
+    BaselineReference,
+    ComparisonOperator,
+    DeltaGuard,
+    ImprovementCondition,
+    ImprovementDirection,
+    MetricSelector,
+    TargetCondition,
+    ValidationCriteria,
 )
 
 UTC_NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)

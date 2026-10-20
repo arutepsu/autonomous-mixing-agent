@@ -26,40 +26,31 @@ from autonomous_mixing.application import (
     validate_decision_response,
 )
 from autonomous_mixing.application.ports import AudioAnalyzer, DecisionController
-from autonomous_mixing.domain import (
-    Abstain,
-    AbstentionReason,
-    Action,
-    ActionId,
+from autonomous_mixing.domain.action import Action, SetTrackGain
+from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
+from autonomous_mixing.domain.decision import Abstain, AbstentionReason, ControllerIdentity, Decision, ProposeAction
+from autonomous_mixing.domain.observation import AnalysisSpec, MeasuredScalar, Observation, Unavailable
+from autonomous_mixing.domain.project import (
     AnalysisScope,
-    AnalysisSpec,
     ArtifactCheckpoint,
-    ArtifactId,
     ArtifactKind,
-    AssertionSource,
     AudioArtifact,
-    BudgetLimits,
-    BudgetUsage,
-    CheckpointId,
-    ContextId,
-    ControllerIdentity,
-    Decision,
-    DecisionId,
     FrequencyRange,
-    MeasuredScalar,
-    MusicalContext,
-    Observation,
-    ObservationId,
-    ProjectId,
     ProjectSnapshot,
-    ProposeAction,
-    Revision,
-    SetTrackGain,
     TimeRange,
     Track,
+)
+from autonomous_mixing.domain.run import BudgetLimits, BudgetUsage
+from autonomous_mixing.domain.shared import (
+    ActionId,
+    ArtifactId,
+    CheckpointId,
+    ContextId,
+    DecisionId,
+    ObservationId,
+    ProjectId,
+    Revision,
     TrackId,
-    TrackRole,
-    Unavailable,
     VersionRef,
 )
 
@@ -616,5 +607,7 @@ def test_application_runtime_imports_stay_within_stdlib_domain_and_application()
 def test_domain_remains_independent_of_application():
     loaded = _modules_loaded_by("import autonomous_mixing.domain")
     assert not [name for name in loaded if name.startswith(APPLICATION_PACKAGE)]
-    for module in sorted((SRC_DIR / "domain").glob("*.py")):
-        assert APPLICATION_PACKAGE not in module.read_text(encoding="utf-8"), module.name
+    domain_modules = sorted(m for m in (SRC_DIR / "domain").rglob("*.py") if "__pycache__" not in m.parts)
+    assert any(m.parent.name == "project" and m.name == "checkpoint.py" for m in domain_modules)
+    for module in domain_modules:
+        assert APPLICATION_PACKAGE not in module.read_text(encoding="utf-8"), module

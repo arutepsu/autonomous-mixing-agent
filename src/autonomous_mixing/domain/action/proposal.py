@@ -7,19 +7,13 @@ enforcement; action types and bounds remain open decision D5.
 
 from dataclasses import dataclass
 
-from autonomous_mixing.domain.values import ActionId, ProjectId, Revision, TrackId, require_finite, require_instance
-
-
-@dataclass(frozen=True)
-class SetTrackGain:
-    """Set a track's gain to an absolute value in dB (not a relative change). No bounds are implied."""
-
-    track_id: TrackId
-    value_db: float
-
-    def __post_init__(self) -> None:
-        require_instance(self.track_id, TrackId, "SetTrackGain.track_id")
-        require_finite(self.value_db, "SetTrackGain.value_db")
+from autonomous_mixing.domain.action.operations import SetTrackGain
+from autonomous_mixing.domain.shared import (
+    ActionId,
+    ProjectId,
+    Revision,
+    require_instance,
+)
 
 
 @dataclass(frozen=True)

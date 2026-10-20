@@ -11,33 +11,28 @@ from datetime import datetime, timezone
 
 import pytest
 
-from autonomous_mixing.domain import (
+from autonomous_mixing.domain.action import Action, SetTrackGain
+from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
+from autonomous_mixing.domain.decision import (
     Abstain,
     AbstentionReason,
-    Action,
-    ActionId,
-    AnalysisScope,
-    ArtifactId,
-    AssertionSource,
-    ContextId,
     ControllerIdentity,
     Decision,
+    ProposeAction,
+    validate_decision_references,
+)
+from autonomous_mixing.domain.observation import MeasuredScalar, Observation
+from autonomous_mixing.domain.project import AnalysisScope, ProjectSnapshot, TimeRange, Track
+from autonomous_mixing.domain.shared import (
+    ActionId,
+    ArtifactId,
+    ContextId,
     DecisionId,
-    MeasuredScalar,
-    MusicalContext,
-    Observation,
     ObservationId,
     ProjectId,
-    ProjectSnapshot,
-    ProposeAction,
     Revision,
-    SetTrackGain,
-    TimeRange,
-    Track,
     TrackId,
-    TrackRole,
     VersionRef,
-    validate_decision_references,
 )
 
 UTC_NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)

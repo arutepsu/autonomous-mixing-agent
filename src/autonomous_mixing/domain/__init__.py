@@ -1,10 +1,28 @@
-"""Domain records: projects, context, observations (ADR-011), decisions (ADR-012), validation (ADR-013), runs (ADR-014), attempts (ADR-015).
+"""Domain records (ADR-011 to ADR-015), organized into component packages (ADR-017).
 
-Standard library only; no audio, storage, provider or CLI dependencies. Not yet used by M0.
+Standard library only; no audio, storage, provider or CLI dependencies. Prefer importing from the
+component interfaces (e.g. ``autonomous_mixing.domain.project``). These root exports are a
+compatibility interface re-exporting the same objects.
 """
 
-from autonomous_mixing.domain.action import Action, SetTrackGain
-from autonomous_mixing.domain.context import AssertionSource, ContextPreference, MusicalContext, TrackRole
+from autonomous_mixing.domain.action import (
+    Action,
+    ExecutionIssue,
+    ExecutionReceipt,
+    ExecutionStatus,
+    RollbackReceipt,
+    RollbackStatus,
+    SetTrackGain,
+    derive_candidate_checkpoint,
+    validate_receipt_against_checkpoint,
+    validate_rollback_references,
+)
+from autonomous_mixing.domain.context import (
+    AssertionSource,
+    ContextPreference,
+    MusicalContext,
+    TrackRole,
+)
 from autonomous_mixing.domain.decision import (
     Abstain,
     AbstentionReason,
@@ -12,17 +30,6 @@ from autonomous_mixing.domain.decision import (
     Decision,
     ProposeAction,
     validate_decision_references,
-)
-from autonomous_mixing.domain.execution import (
-    ArtifactCheckpoint,
-    ExecutionIssue,
-    ExecutionReceipt,
-    ExecutionStatus,
-    RollbackReceipt,
-    RollbackStatus,
-    derive_candidate_checkpoint,
-    validate_receipt_against_checkpoint,
-    validate_rollback_references,
 )
 from autonomous_mixing.domain.observation import (
     AnalysisSpec,
@@ -34,6 +41,7 @@ from autonomous_mixing.domain.observation import (
 )
 from autonomous_mixing.domain.project import (
     AnalysisScope,
+    ArtifactCheckpoint,
     ArtifactKind,
     AudioArtifact,
     FrequencyRange,
@@ -53,6 +61,24 @@ from autonomous_mixing.domain.run import (
     RunState,
     validate_attempt_references,
 )
+from autonomous_mixing.domain.shared import (
+    ActionId,
+    ArtifactId,
+    AttemptId,
+    CheckpointId,
+    ConditionId,
+    ContextId,
+    CriteriaId,
+    DecisionId,
+    ExecutionId,
+    ObservationId,
+    ProjectId,
+    Revision,
+    RunId,
+    TrackId,
+    ValidationResultId,
+    VersionRef,
+)
 from autonomous_mixing.domain.validation import (
     AbsoluteGuard,
     AssessmentMode,
@@ -70,24 +96,6 @@ from autonomous_mixing.domain.validation import (
     ValidationResult,
     ValidationVerdict,
     validate_validation_references,
-)
-from autonomous_mixing.domain.values import (
-    ActionId,
-    ArtifactId,
-    AttemptId,
-    CheckpointId,
-    ConditionId,
-    ContextId,
-    CriteriaId,
-    DecisionId,
-    ExecutionId,
-    ObservationId,
-    ProjectId,
-    Revision,
-    RunId,
-    TrackId,
-    ValidationResultId,
-    VersionRef,
 )
 
 __all__ = [

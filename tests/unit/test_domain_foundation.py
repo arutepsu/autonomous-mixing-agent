@@ -12,33 +12,34 @@ from pathlib import Path
 
 import pytest
 
-from autonomous_mixing.domain import (
-    AnalysisScope,
+from autonomous_mixing.domain.context import AssertionSource, ContextPreference, MusicalContext, TrackRole
+from autonomous_mixing.domain.observation import (
     AnalysisSpec,
-    ArtifactCheckpoint,
-    ArtifactId,
-    ArtifactKind,
-    AssertionSource,
-    AudioArtifact,
-    CheckpointId,
-    ContextId,
-    ContextPreference,
-    FrequencyRange,
     MeasuredScalar,
-    MusicalContext,
     Observation,
-    ObservationId,
-    ProjectId,
-    ProjectSnapshot,
     RenderSpec,
-    Revision,
+    Unavailable,
+    validate_observation_sources,
+)
+from autonomous_mixing.domain.project import (
+    AnalysisScope,
+    ArtifactCheckpoint,
+    ArtifactKind,
+    AudioArtifact,
+    FrequencyRange,
+    ProjectSnapshot,
     TimeRange,
     Track,
+)
+from autonomous_mixing.domain.shared import (
+    ArtifactId,
+    CheckpointId,
+    ContextId,
+    ObservationId,
+    ProjectId,
+    Revision,
     TrackId,
-    TrackRole,
-    Unavailable,
     VersionRef,
-    validate_observation_sources,
 )
 
 UTC_NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
@@ -595,10 +596,22 @@ def test_boundary_checker_resolves_relative_imports_from_package_init():
 
 
 def test_domain_modules_import_only_standard_library_and_domain():
-    modules = sorted(DOMAIN_DIR.glob("*.py"))
-    assert {m.name for m in modules} >= {"__init__.py", "values.py", "project.py", "context.py", "observation.py"}
+    # Recursive: the domain is organized into component packages (ADR-017); caches are not scanned.
+    modules = sorted(m for m in DOMAIN_DIR.rglob("*.py") if "__pycache__" not in m.parts)
+    relative = {m.relative_to(DOMAIN_DIR).as_posix() for m in modules}
+    assert relative >= {
+        "__init__.py",
+        "values.py",
+        "project/__init__.py",
+        "project/checkpoint.py",
+        "context/musical_context.py",
+        "observation/provenance.py",
+        "action/execution.py",
+        "run/attempt.py",
+    }
     for module in modules:
-        is_package = module.name == "__init__.py"
-        module_name = DOMAIN_PACKAGE if is_package else f"{DOMAIN_PACKAGE}.{module.stem}"
+        parts = (DOMAIN_PACKAGE.split(".")) + list(module.relative_to(DOMAIN_DIR).with_suffix("").parts)
+        is_package = parts[-1] == "__init__"
+        module_name = ".".join(parts[:-1] if is_package else parts)
         violations = _boundary_violations(module.read_text(encoding="utf-8"), module_name, is_package=is_package)
-        assert violations == [], f"{module.name} imports {violations}"
+        assert violations == [], f"{module} imports {violations}"

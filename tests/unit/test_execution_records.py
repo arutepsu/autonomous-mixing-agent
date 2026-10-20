@@ -10,70 +10,76 @@ from datetime import datetime, timezone
 
 import pytest
 
-from autonomous_mixing.domain import (
-    Abstain,
-    AbstentionReason,
+from autonomous_mixing.domain.action import (
     Action,
-    ActionId,
-    AnalysisScope,
-    AnalysisSpec,
-    ArtifactCheckpoint,
-    ArtifactId,
-    ArtifactKind,
-    AssessmentMode,
-    AttemptDisposition,
-    AttemptId,
-    AudioArtifact,
-    BudgetLimits,
-    BudgetUsage,
-    CheckpointId,
-    CheckResult,
-    CheckStatus,
-    ComparisonOperator,
-    ConditionId,
-    ContextId,
-    ControllerIdentity,
-    CorrectionAttempt,
-    CriteriaId,
-    Decision,
-    DecisionId,
-    ExecutionId,
     ExecutionIssue,
     ExecutionReceipt,
     ExecutionStatus,
-    ImprovementCondition,
-    ImprovementDirection,
-    MeasuredScalar,
-    MetricSelector,
-    MusicalContext,
-    Observation,
-    ObservationId,
-    ProjectId,
-    ProjectSnapshot,
-    ProposeAction,
-    RenderSpec,
-    Revision,
     RollbackReceipt,
     RollbackStatus,
-    Run,
-    RunConfiguration,
-    RunId,
-    RunState,
     SetTrackGain,
-    TargetCondition,
-    TargetStatus,
+    derive_candidate_checkpoint,
+    validate_rollback_references,
+)
+from autonomous_mixing.domain.context import MusicalContext
+from autonomous_mixing.domain.decision import Abstain, AbstentionReason, ControllerIdentity, Decision, ProposeAction
+from autonomous_mixing.domain.observation import (
+    AnalysisSpec,
+    MeasuredScalar,
+    Observation,
+    RenderSpec,
+    validate_observation_sources,
+)
+from autonomous_mixing.domain.project import (
+    AnalysisScope,
+    ArtifactCheckpoint,
+    ArtifactKind,
+    AudioArtifact,
+    ProjectSnapshot,
     TimeRange,
     Track,
+)
+from autonomous_mixing.domain.run import (
+    AttemptDisposition,
+    BudgetLimits,
+    BudgetUsage,
+    CorrectionAttempt,
+    Run,
+    RunConfiguration,
+    RunState,
+    validate_attempt_references,
+)
+from autonomous_mixing.domain.shared import (
+    ActionId,
+    ArtifactId,
+    AttemptId,
+    CheckpointId,
+    ConditionId,
+    ContextId,
+    CriteriaId,
+    DecisionId,
+    ExecutionId,
+    ObservationId,
+    ProjectId,
+    Revision,
+    RunId,
     TrackId,
+    ValidationResultId,
+    VersionRef,
+)
+from autonomous_mixing.domain.validation import (
+    AssessmentMode,
+    CheckResult,
+    CheckStatus,
+    ComparisonOperator,
+    ImprovementCondition,
+    ImprovementDirection,
+    MetricSelector,
+    TargetCondition,
+    TargetStatus,
     ValidationCriteria,
     ValidationResult,
-    ValidationResultId,
     ValidationVerdict,
-    VersionRef,
-    derive_candidate_checkpoint,
-    validate_attempt_references,
-    validate_observation_sources,
-    validate_rollback_references,
     validate_validation_references,
 )
 
@@ -865,7 +871,7 @@ def test_execution_and_run_modules_load_only_standard_library_and_domain_modules
     script = (
         "import sys\n"
         "before = set(sys.modules)\n"
-        "import autonomous_mixing.domain.execution, autonomous_mixing.domain.run\n"
+        "import autonomous_mixing.domain.action, autonomous_mixing.domain.run\n"
         "for name in sorted(set(sys.modules) - before):\n"
         "    top = name.split('.')[0]\n"
         "    ok = top in sys.stdlib_module_names or name == 'autonomous_mixing' \\\n"

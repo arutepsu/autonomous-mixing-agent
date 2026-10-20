@@ -10,31 +10,32 @@ import sys
 
 import pytest
 
-from autonomous_mixing.domain import (
+from autonomous_mixing.domain.observation import MeasuredScalar
+from autonomous_mixing.domain.project import AnalysisScope, TimeRange
+from autonomous_mixing.domain.shared import (
+    ConditionId,
+    CriteriaId,
+    ObservationId,
+    TrackId,
+    ValidationResultId,
+    VersionRef,
+)
+from autonomous_mixing.domain.validation import (
     AbsoluteGuard,
-    AnalysisScope,
     AssessmentMode,
     BaselineReference,
     CheckResult,
     CheckStatus,
     ComparisonOperator,
-    ConditionId,
-    CriteriaId,
     DeltaGuard,
     ImprovementCondition,
     ImprovementDirection,
-    MeasuredScalar,
     MetricSelector,
-    ObservationId,
     TargetCondition,
     TargetStatus,
-    TimeRange,
-    TrackId,
     ValidationCriteria,
     ValidationResult,
-    ValidationResultId,
     ValidationVerdict,
-    VersionRef,
     validate_validation_references,
 )
 

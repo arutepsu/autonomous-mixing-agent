@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, TypeVar
 
-from autonomous_mixing.domain.values import require_instance, require_text
+from autonomous_mixing.domain.shared import require_instance, require_text
 
 T = TypeVar("T")
 

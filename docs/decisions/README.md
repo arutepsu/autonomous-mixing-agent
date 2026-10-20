@@ -20,6 +20,7 @@ One file per decision, named `NNNN-short-title.md`. Accepted ADRs are not edited
 | [014](0014-run-lifecycle-and-budget-records.md) | Run lifecycle and budget records without a state machine | 2026-10-19 | Proposed |
 | [015](0015-correction-attempt-and-artifact-checkpoint-records.md) | Correction-attempt and artifact-checkpoint records | 2026-10-19 | Proposed |
 | [016](0016-application-observation-and-decision-contracts.md) | Application observation and decision contracts | 2026-10-20 | Proposed |
+| [017](0017-domain-component-packages.md) | Domain organized into component packages with enforced dependencies | 2026-10-20 | Proposed |
 
 ## Template
 
