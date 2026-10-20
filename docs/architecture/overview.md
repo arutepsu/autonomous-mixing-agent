@@ -44,6 +44,17 @@ Proposed in [ADR-011](../decisions/0011-domain-foundation-boundary.md), [ADR-012
 
 Not yet modelled: problem candidates and uncertainty (FR-05, D11), constraint/preference types (D6), action types and bounds beyond the `SetTrackGain` proposal shape (D5), track kinds/routing/controls, enforcement of protections and bounds, verdict computation and evidence compatibility (evaluator), budget enforcement, lifecycle transitions, dependency invalidation of derived artifacts, artifact I/O, hashing and integrity verification, candidate cleanup, run events and persistence.
 
+## Application contracts (implemented contracts; no services)
+Proposed in [ADR-016](../decisions/0016-application-observation-and-decision-contracts.md). `autonomous_mixing.application` depends only on the standard library and the domain layer; the domain never imports it. Evidence: `tests/unit/test_application_contracts.py`, which also enforces both import boundaries. Nothing in M0 uses these contracts yet, and no requirement is met by them alone.
+
+| Module | Responsibility |
+| --- | --- |
+| `autonomous_mixing.application.results` | `Success[T]`, `PortFailureCode`, `PortFailure` (code, message, advisory `retryable`), `PortResult = Success[T] \| PortFailure`. |
+| `autonomous_mixing.application.contracts` | `AnalysisRequest`/`AnalysisResponse` and `DecisionRequest`/`DecisionResponse`; sources are supplied as an `ArtifactCheckpoint` matching the snapshot. `validate_analysis_response` (provenance, spec, metrics, scope containment, completeness, no duplicate metric/scope) and `validate_decision_response` (decision references, controller identity). |
+| `autonomous_mixing.application.ports` | `AudioAnalyzer.analyze` and `DecisionController.decide` Protocols returning `PortResult`. |
+
+Not yet defined: analyzers, controllers and other adapters, orchestration, retries, budget enforcement, persistence, CLI integration, and the deferred controller inputs (problem candidates, action capabilities and permitted actions, attempt history, raw provider responses).
+
 ## Open questions
 - How should the M0 two-stem interface generalize to role-declared stems (e.g. via the `track_roles` manifest field in [`dataset-plan.md`](../research/dataset-plan.md)), and which report-schema version change does that imply?
 - Should `scripts/generate_test_audio.py` be removed or retained (and if retained, for which documented purpose)? Requires owner approval.
