@@ -14,6 +14,11 @@ One file per decision, named `NNNN-short-title.md`. Accepted ADRs are not edited
 | [008](0008-controlled-defect-injection.md) | Controlled defect injection into real stems | 2026-10-15 | Accepted; recording location refined by ADR-010 |
 | [009](0009-agent-team-implementation-baseline.md) | Development agent team follows the offline Python/WAV baseline | 2026-10-15 | Accepted; hidden-reference item closed by ADR-010 |
 | [010](0010-hidden-reference-boundary.md) | Hidden-reference boundary between runtime and research evaluation | 2026-10-15 | Accepted |
+| [011](0011-domain-foundation-boundary.md) | Dependency-free domain records for projects, context and observations | 2026-10-19 | Proposed |
+| [012](0012-typed-action-proposals-and-decisions.md) | Typed action proposals and single-outcome decisions | 2026-10-19 | Proposed |
+| [013](0013-validation-criteria-and-result-records.md) | Validation criteria and result records without an evaluator | 2026-10-19 | Proposed |
+| [014](0014-run-lifecycle-and-budget-records.md) | Run lifecycle and budget records without a state machine | 2026-10-19 | Proposed |
+| [015](0015-correction-attempt-and-artifact-checkpoint-records.md) | Correction-attempt and artifact-checkpoint records | 2026-10-19 | Proposed |
 
 ## Template
 
