@@ -98,6 +98,7 @@ COMPONENT_PUBLIC.update(
                 "validate_receipt_against_checkpoint",
                 "derive_candidate_checkpoint",
                 "derive_candidate_project_state",  # added by the processing-state migration (ADR-019)
+                "validate_gain_execution",  # added by the audit F1 correction
             ),
             "rollback": ("RollbackStatus", "RollbackReceipt", "validate_rollback_references"),
         },
@@ -164,8 +165,9 @@ def test_every_previous_root_export_is_the_same_object_as_its_single_owner():
                 owners[name] = package
     assert set(root.__all__) == set(owners)
     # 76 exports from the component refactor, plus three processing-state records and
-    # derive_candidate_project_state (ADR-019), plus MixRecipe and SummingPolicy (ADR-020).
-    assert len(root.__all__) == 82
+    # derive_candidate_project_state (ADR-019), plus MixRecipe and SummingPolicy (ADR-020), plus
+    # validate_gain_execution (audit F1 correction).
+    assert len(root.__all__) == 83
     for name, owner in owners.items():
         assert getattr(root, name) is getattr(owner, name), name
 

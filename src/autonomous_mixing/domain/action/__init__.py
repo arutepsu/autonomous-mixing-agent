@@ -6,6 +6,7 @@ from autonomous_mixing.domain.action.execution import (
     ExecutionStatus,
     derive_candidate_checkpoint,
     derive_candidate_project_state,
+    validate_gain_execution,
     validate_receipt_against_checkpoint,
 )
 from autonomous_mixing.domain.action.operations import SetTrackGain
@@ -21,6 +22,7 @@ __all__ = [
     "validate_receipt_against_checkpoint",
     "derive_candidate_checkpoint",
     "derive_candidate_project_state",
+    "validate_gain_execution",
     "RollbackStatus",
     "RollbackReceipt",
     "validate_rollback_references",

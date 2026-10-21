@@ -1031,6 +1031,84 @@ def test_derived_candidate_passes_attempt_references():
     assert attempt.candidate_state.processing.track_gains[1].gain_db == -3.0
 
 
+# --- audit F1/F5: manually assembled candidates cannot bypass derivation checks ------------
+
+
+def _manual_candidate(before: ProjectState, receipt: ExecutionReceipt, value_db=-3.0, cid="cp2") -> ProjectState:
+    """Assemble a candidate state by hand, without derive_candidate_project_state."""
+    superseded = set(receipt.superseded_artifact_ids)
+    retained = tuple(a for a in before.audio.artifacts if a.artifact_id not in superseded)
+    revision = receipt.candidate_revision
+    audio = ArtifactCheckpoint(CheckpointId(cid), ProjectId("p1"), revision, retained + receipt.candidate_artifacts)
+    gains = tuple(
+        TrackGainState(g.track_id, g.input_artifact, value_db) if g.track_id == TrackId("t2") else g
+        for g in before.processing.track_gains
+    )
+    snapshot = dataclasses.replace(before.snapshot, revision=revision)
+    return ProjectState(snapshot, ProjectProcessingState(ProjectId("p1"), revision, gains), audio)
+
+
+def test_audit_f1_manually_accepted_attempt_with_stale_target_stem_is_rejected():
+    # Audit reproduction F1: only the mix is replaced, yet the candidate records t2 at -3 dB.
+    receipt = _receipt(
+        CR,
+        artifacts=(_artifact("c-mix", ("t1", "t2"), revision="r2", kind=ArtifactKind.MIX),),
+        superseded=(ArtifactId("a-mix"),),
+    )
+    attempt = _attempt(D.ACCEPTED, receipt, _validation(), candidate=_manual_candidate(_state(), receipt))
+    with pytest.raises(ValueError, match="a-t2"):
+        validate_attempt_references(attempt, _run(), _decision())
+
+
+def test_manual_candidate_reusing_a_baseline_production_revision_is_rejected():
+    # Before state r5 whose audio and fixed inputs were produced at r1; the candidate claims revision r1.
+    artifacts = _checkpoint_artifacts("r1")
+    inputs = {a.artifact_id: a for a in artifacts}
+    gains = tuple(TrackGainState(TrackId(t), inputs[ArtifactId(f"a-{t}")], 0.0) for t in ("t1", "t2"))
+    audio = ArtifactCheckpoint(CheckpointId("cp5"), ProjectId("p1"), Revision("r5"), artifacts)
+    before = ProjectState(_snapshot("r5"), ProjectProcessingState(ProjectId("p1"), Revision("r5"), gains), audio)
+    receipt = _receipt(
+        CR,
+        Revision("r1"),
+        (
+            _artifact("n-t2", ("t2",), revision="r1"),
+            _artifact("n-mix", ("t1", "t2"), revision="r1", kind=ArtifactKind.MIX),
+        ),
+        before="r5",
+    )
+    with pytest.raises(ValueError, match="revision"):
+        _attempt(D.PENDING, receipt, state=before, candidate=_manual_candidate(before, receipt))
+
+
+def test_manual_candidate_reusing_a_baseline_only_revision_is_rejected_at_construction():
+    # The t2 baseline was produced at rb and is no longer an audio member, so generic checkpoint
+    # derivation cannot see rb; the attempt's composite-state check must.
+    baseline = _artifact("a-t2", ("t2",), revision="rb")
+    rendered_t2 = _artifact("c-t2", ("t2",), revision="r5")
+    mix = _artifact("a-mix", ("t1", "t2"), revision="r5", kind=ArtifactKind.MIX)
+    t1 = _artifact("a-t1", ("t1",), revision="r5")
+    gains = (TrackGainState(TrackId("t1"), t1, 0.0), TrackGainState(TrackId("t2"), baseline, -2.0))
+    before = ProjectState(
+        _snapshot("r5"),
+        ProjectProcessingState(ProjectId("p1"), Revision("r5"), gains),
+        ArtifactCheckpoint(CheckpointId("cp5"), ProjectId("p1"), Revision("r5"), (t1, rendered_t2, mix)),
+    )
+    receipt = _receipt(
+        CR,
+        Revision("rb"),
+        (
+            _artifact("n-t2", ("t2",), revision="rb"),
+            _artifact("n-mix", ("t1", "t2"), revision="rb", kind=ArtifactKind.MIX),
+        ),
+        superseded=(ArtifactId("c-t2"), ArtifactId("a-mix")),
+        before="r5",
+    )
+    assert Revision("rb") not in before.audio.known_revisions
+    derive_candidate_checkpoint(before.audio, receipt, CheckpointId("cp6"))  # not visible to membership alone
+    with pytest.raises(ValueError, match="revision"):
+        _attempt(D.PENDING, receipt, state=before, candidate=_manual_candidate(before, receipt))
+
+
 # --- dependency boundary ---------------------------------------------------------
 
 

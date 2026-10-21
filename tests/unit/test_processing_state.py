@@ -361,3 +361,191 @@ def test_derived_state_is_only_a_candidate_record():
     candidate = _derive(previous, *_render_step(previous, -3.0, 2))
     assert isinstance(candidate, ProjectState)
     assert {f.name for f in dataclasses.fields(candidate)} == {"snapshot", "processing", "audio"}
+
+
+# --- audit F1: gain settings require consistent artifact replacement ------------------------
+# Metadata consistency only: none of this proves that any audio was rendered correctly.
+
+from autonomous_mixing.domain.action import validate_gain_execution  # noqa: E402
+
+
+def _receipt(state: ProjectState, candidates, superseded, n=2, action="x2") -> ExecutionReceipt:
+    return ExecutionReceipt(
+        ExecutionId(f"e{n}"),
+        ActionId(action),
+        ProjectId("p1"),
+        state.revision,
+        ExecutionStatus.CANDIDATE_READY,
+        Revision(f"r{n}"),
+        tuple(candidates),
+        tuple(ArtifactId(a) for a in superseded),
+        None,
+    )
+
+
+def _gain_action(state: ProjectState, value=-4.0, target="t2", action="x2") -> Action:
+    return Action(ActionId(action), ProjectId("p1"), state.revision, SetTrackGain(TrackId(target), value))
+
+
+NEW_T2 = _artifact("n-t2", ("t2",), revision="r2")
+NEW_MIX = _artifact("n-mix", ("t1", "t2", "t3"), revision="r2", kind=ArtifactKind.MIX)
+GROUP_T23 = _artifact("g-t23", ("t2", "t3"), kind=ArtifactKind.GROUP)
+NEW_GROUP_T23 = _artifact("n-g-t23", ("t2", "t3"), revision="r2", kind=ArtifactKind.GROUP)
+
+
+def test_audit_f1_gain_change_with_only_a_new_mix_is_rejected():
+    # Audit reproduction F1: the receipt replaces only the mix, so the t2 stem would stay the old render.
+    state = _state()
+    receipt = _receipt(state, (NEW_MIX,), ("a-mix",))
+    with pytest.raises(ValueError, match="a-t2"):
+        _derive(state, receipt, _gain_action(state))
+    with pytest.raises(ValueError, match="a-t2"):
+        validate_gain_execution(state, receipt, _gain_action(state))
+
+
+@pytest.mark.parametrize(
+    "candidates, superseded, match",
+    [
+        ((NEW_T2,), ("a-t2",), "a-mix"),
+        ((NEW_T2,), ("a-t2", "a-mix"), "replace"),
+        ((NEW_T2, NEW_MIX, _artifact("n-t1", ("t1",), revision="r2")), ("a-t2", "a-mix", "a-t1"), "unrelated"),
+        ((NEW_T2, NEW_MIX, _artifact("n-t3", ("t3",), revision="r2")), ("a-t2", "a-mix"), "replace"),
+        (
+            (NEW_T2, _artifact("n-grp", ("t1", "t2", "t3"), revision="r2", kind=ArtifactKind.GROUP)),
+            ("a-t2", "a-mix"),
+            "replace",
+        ),
+        (
+            (NEW_T2, _artifact("n-mix", ("t1", "t2"), revision="r2", kind=ArtifactKind.MIX)),
+            ("a-t2", "a-mix"),
+            "replace",
+        ),
+    ],
+    ids=[
+        "stale-mix-retained",
+        "superseded-without-replacement",
+        "supersedes-unrelated",
+        "unrelated-candidate-added",
+        "wrong-replacement-kind",
+        "wrong-replacement-tracks",
+    ],
+)
+def test_gain_execution_requires_exact_replacement_of_target_dependent_artifacts(candidates, superseded, match):
+    state = _state()
+    with pytest.raises(ValueError, match=match):
+        validate_gain_execution(state, _receipt(state, candidates, superseded), _gain_action(state))
+
+
+def test_replacement_multiplicity_is_preserved():
+    state = _state(audio=_audio(artifacts=(INPUT_T1, INPUT_T2, INPUT_T3, INPUT_MIX, GROUP_T23)))
+    superseded = ("a-t2", "a-mix", "g-t23")
+    with pytest.raises(ValueError, match="replace"):  # two affected outputs cannot be replaced by one
+        validate_gain_execution(state, _receipt(state, (NEW_T2, NEW_MIX), superseded), _gain_action(state))
+    with pytest.raises(ValueError, match="replace"):  # a second mix is not a group replacement
+        second_mix = _artifact("n-mix2", ("t1", "t2", "t3"), revision="r2", kind=ArtifactKind.MIX)
+        validate_gain_execution(state, _receipt(state, (NEW_T2, NEW_MIX, second_mix), superseded), _gain_action(state))
+    # Structural group coverage is representable in the domain; it does not mean groups are processable.
+    validate_gain_execution(state, _receipt(state, (NEW_T2, NEW_MIX, NEW_GROUP_T23), superseded), _gain_action(state))
+
+
+def test_two_same_shape_outputs_cannot_be_replaced_by_one():
+    # Two current full mixes both depend on t2; the shape sets match, but one new mix cannot replace both.
+    alt_mix = _artifact("alt-mix", ("t1", "t2", "t3"), kind=ArtifactKind.MIX)
+    state = _state(audio=_audio(artifacts=(INPUT_T1, INPUT_T2, INPUT_T3, INPUT_MIX, alt_mix)))
+    superseded = ("a-t2", "a-mix", "alt-mix")
+    with pytest.raises(ValueError, match="replace"):
+        validate_gain_execution(state, _receipt(state, (NEW_T2, NEW_MIX), superseded), _gain_action(state))
+    second_mix = _artifact("n-mix2", ("t1", "t2", "t3"), revision="r2", kind=ArtifactKind.MIX)
+    validate_gain_execution(state, _receipt(state, (NEW_T2, NEW_MIX, second_mix), superseded), _gain_action(state))
+
+
+def test_replacement_contributors_compare_as_sets():
+    state = _state()
+    reordered_mix = _artifact("n-mix", ("t3", "t1", "t2"), revision="r2", kind=ArtifactKind.MIX)
+    validate_gain_execution(state, _receipt(state, (NEW_T2, reordered_mix), ("a-t2", "a-mix")), _gain_action(state))
+
+
+def test_gain_execution_requires_a_current_target_stem():
+    mix_only = _state(audio=_audio(artifacts=(INPUT_T1, INPUT_T3, INPUT_MIX)))
+    receipt = _receipt(mix_only, (NEW_MIX,), ("a-mix",))
+    with pytest.raises(ValueError, match="STEM"):
+        validate_gain_execution(mix_only, receipt, _gain_action(mix_only))
+
+
+def test_valid_gain_execution_and_derivation():
+    state = _state()
+    receipt = _receipt(state, (NEW_T2, NEW_MIX), ("a-t2", "a-mix"))
+    validate_gain_execution(state, receipt, _gain_action(state))
+    candidate = _derive(state, receipt, _gain_action(state))
+    assert {str(a.artifact_id): str(a.revision) for a in candidate.audio.artifacts} == {
+        "a-t1": "r0",  # unchanged artifacts keep their older production revisions
+        "a-t3": "r0",
+        "n-t2": "r2",
+        "n-mix": "r2",
+    }
+
+
+# --- audit F5: locally known revisions cannot be reused ------------------------------------
+
+BASELINE_RB = _artifact("a-t2", ("t2",), revision="rb")  # baseline produced at rb, no longer an audio member
+
+
+def _rendered_state() -> ProjectState:
+    """State r1 whose t2 audio is a rendered stem; its fixed input (produced at rb) is not an audio member."""
+    rendered_t2 = _artifact("c-t2", ("t2",), revision="r1")
+    gains = (_gain("t1"), TrackGainState(TrackId("t2"), BASELINE_RB, -2.0))
+    return _state(
+        processing=_processing(gains=gains), audio=_audio(artifacts=(INPUT_T1, rendered_t2, INPUT_T3, INPUT_MIX))
+    )
+
+
+def test_project_state_exposes_locally_known_revisions():
+    state = _rendered_state()
+    assert state.known_revisions == frozenset({Revision("r1"), Revision("r0"), Revision("rb")})
+    assert state.audio.known_revisions == frozenset({Revision("r1"), Revision("r0")})
+
+
+def _candidate_receipt(state: ProjectState, revision: str) -> ExecutionReceipt:
+    stem = _artifact("n-t2", ("t2",), revision=revision)
+    mix = _artifact("n-mix", ("t1", "t2", "t3"), revision=revision, kind=ArtifactKind.MIX)
+    return ExecutionReceipt(
+        ExecutionId("e2"),
+        ActionId("x2"),
+        ProjectId("p1"),
+        state.revision,
+        ExecutionStatus.CANDIDATE_READY,
+        Revision(revision),
+        (stem, mix),
+        (ArtifactId("c-t2"), ArtifactId("a-mix")),
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "revision, checkpoint_rejects",
+    [("r0", True), ("rb", False)],
+    ids=["retained-artifact-production-revision", "superseded-baseline-production-revision"],
+)
+def test_candidate_revision_must_not_reuse_a_locally_known_revision(revision, checkpoint_rejects):
+    state = _rendered_state()
+    receipt = _candidate_receipt(state, revision)
+    with pytest.raises(ValueError, match="revision"):
+        _derive(state, receipt, _gain_action(state))
+    # Generic checkpoint derivation sees only checkpoint and member revisions, not fixed baselines.
+    if checkpoint_rejects:
+        with pytest.raises(ValueError, match="revision"):
+            derive_candidate_checkpoint(state.audio, receipt, CheckpointId("cp2"))
+    else:
+        derive_candidate_checkpoint(state.audio, receipt, CheckpointId("cp2"))
+
+
+def test_current_revision_cannot_be_a_candidate_revision():
+    state = _rendered_state()
+    with pytest.raises(ValueError, match="revision"):
+        _candidate_receipt(state, "r1")  # rejected when the receipt is constructed
+
+
+def test_genuinely_new_candidate_revision_passes():
+    state = _rendered_state()
+    candidate = _derive(state, _candidate_receipt(state, "r2"), _gain_action(state))
+    assert candidate.revision == Revision("r2")

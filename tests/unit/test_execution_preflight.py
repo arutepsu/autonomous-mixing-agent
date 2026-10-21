@@ -639,3 +639,21 @@ def test_processing_plan_rejects_inconsistent_structure():
         with pytest.raises(ValueError):
             dataclasses.replace(plan, **changes)
     assert isinstance(plan, ProcessingPlan)
+
+
+# --- audit F5: candidate revisions must not reuse locally known revisions ------------------
+
+
+@pytest.mark.parametrize(
+    "revision",
+    ["r2", "r1", "r0"],
+    ids=["current-state-revision", "retained-artifact-production-revision", "superseded-baseline-production-revision"],
+)
+def test_candidate_revision_must_not_reuse_a_locally_known_revision(revision):
+    candidate = CandidateIdentity(Revision(revision), ArtifactId("c3-t2"), ArtifactId("c3-mix"))
+    _rejected(preflight_execution(_request(candidate=candidate)), PreflightCode.INVALID_CANDIDATE_IDENTITY)
+
+
+def test_genuinely_new_candidate_revision_passes_preflight():
+    candidate = CandidateIdentity(Revision("r3"), ArtifactId("c3-t2"), ArtifactId("c3-mix"))
+    assert isinstance(preflight_execution(_request(candidate=candidate)), MetadataReady)

@@ -6,6 +6,7 @@ match their hashes, or were cleaned up. Checkpoint membership is owned by the pr
 component; this module derives candidate membership from an execution receipt.
 """
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -13,6 +14,7 @@ from enum import Enum
 from autonomous_mixing.domain.action.proposal import Action
 from autonomous_mixing.domain.project import (
     ArtifactCheckpoint,
+    ArtifactKind,
     AudioArtifact,
     ProjectProcessingState,
     ProjectSnapshot,
@@ -26,6 +28,7 @@ from autonomous_mixing.domain.shared import (
     ExecutionId,
     ProjectId,
     Revision,
+    TrackId,
     require_instance,
     require_text,
     require_tuple_of,
@@ -155,8 +158,10 @@ def derive_candidate_checkpoint(
 
     Retained artifacts are carried over unchanged (identity, hash, location and production
     revision), in their previous order, followed by the candidate artifacts in receipt order. The
-    result represents the candidate revision. This constructs candidate membership only; it does
-    not accept the correction.
+    result represents the candidate revision, which must not reuse a revision visible in the
+    previous membership (its state revision or a member's production revision; fixed baselines and
+    history are not visible here). This constructs candidate membership only; it does not accept the
+    correction and assumes no action target.
     """
     require_instance(checkpoint_id, CheckpointId, "checkpoint_id")
     if receipt.status is not ExecutionStatus.CANDIDATE_READY:
@@ -164,11 +169,65 @@ def derive_candidate_checkpoint(
     validate_receipt_against_checkpoint(receipt, previous)
     if receipt.candidate_revision is None:  # unreachable: CANDIDATE_READY receipts always carry one
         raise ValueError("candidate derivation requires a candidate revision")
+    if receipt.candidate_revision in previous.known_revisions:
+        raise ValueError(
+            f"candidate revision {receipt.candidate_revision} reuses a revision known in the previous membership"
+        )
     superseded = set(receipt.superseded_artifact_ids)
     retained = tuple(artifact for artifact in previous.artifacts if artifact.artifact_id not in superseded)
     return ArtifactCheckpoint(
         checkpoint_id, previous.project_id, receipt.candidate_revision, retained + receipt.candidate_artifacts
     )
+
+
+def validate_gain_execution(previous: ProjectState, receipt: ExecutionReceipt, action: Action) -> None:
+    """Check that a CANDIDATE_READY gain execution replaces exactly the artifacts its target affects.
+
+    Requires matching action, receipt and state identities (action ID, project, expected/before
+    revision), an explicit gain state and at least one current STEM of exactly the target. The receipt
+    must supersede every current artifact whose sources include the target and nothing else, and its
+    candidates must replace them one-for-one by kind and contributing-track set (multiplicity kept;
+    contributor order is provenance, not summation order). The receipt still declares the IDs
+    explicitly; this validates that declaration and infers nothing. It is metadata consistency only:
+    it does not show that a processor supports groups or rendered any content correctly.
+    """
+    require_instance(previous, ProjectState, "previous")
+    require_instance(receipt, ExecutionReceipt, "receipt")
+    require_instance(action, Action, "action")
+    if receipt.status is not ExecutionStatus.CANDIDATE_READY:
+        raise ValueError(f"gain execution check requires a CANDIDATE_READY execution, got {receipt.status.name}")
+    if receipt.action_id != action.action_id:
+        raise ValueError(f"receipt is for action {receipt.action_id}, not {action.action_id}")
+    if action.project_id != previous.project_id:
+        raise ValueError(f"action targets project {action.project_id}, previous state is {previous.project_id}")
+    if action.expected_revision != previous.revision:
+        raise ValueError(f"action expects revision {action.expected_revision}, previous state is {previous.revision}")
+    # Receipt project, before revision, superseded membership and no candidate-ID reuse.
+    validate_receipt_against_checkpoint(receipt, previous.audio)
+
+    target = action.operation.track_id
+    if not any(gain.track_id == target for gain in previous.processing.track_gains):
+        raise ValueError(f"track {target} has no explicit gain state; no baseline is assumed")
+    affected = [artifact for artifact in previous.audio.artifacts if target in artifact.source_track_ids]
+    if not any(a.kind is ArtifactKind.STEM and a.source_track_ids == (target,) for a in affected):
+        raise ValueError(f"the before state has no current STEM of exactly track {target}")
+
+    affected_ids = {artifact.artifact_id for artifact in affected}
+    superseded = set(receipt.superseded_artifact_ids)
+    stale = sorted(str(a) for a in affected_ids - superseded)
+    if stale:
+        raise ValueError(f"receipt does not supersede artifacts depending on track {target}: {', '.join(stale)}")
+    unrelated = sorted(str(a) for a in superseded - affected_ids)
+    if unrelated:
+        raise ValueError(f"receipt supersedes artifacts unrelated to track {target}: {', '.join(unrelated)}")
+
+    def shape(artifact: AudioArtifact) -> tuple[ArtifactKind, frozenset[TrackId]]:
+        return artifact.kind, frozenset(artifact.source_track_ids)
+
+    if Counter(map(shape, affected)) != Counter(map(shape, receipt.candidate_artifacts)):
+        raise ValueError(
+            "candidate artifacts must replace the superseded artifacts one-for-one by kind and contributing tracks"
+        )
 
 
 def derive_candidate_project_state(
@@ -180,32 +239,23 @@ def derive_candidate_project_state(
 ) -> ProjectState:
     """Assemble the complete candidate state claimed by an executed gain action and its receipt.
 
-    The snapshot keeps the previous track inventory and order at the receipt's candidate revision
-    and the supplied UTC capture time. Audio membership comes from ``derive_candidate_checkpoint``.
-    Processing replaces only the target's ``gain_db`` with the requested absolute value; fixed
-    input artifacts, non-target settings and their order are carried over unchanged. A target
-    without an explicit gain state is an error: no baseline or zero gain is invented. This does not
-    render, accept, compute deltas or discover dependent artifacts; an executor must later verify
-    the actual outputs.
+    First runs ``validate_gain_execution`` and rejects a candidate revision that reuses any locally
+    known revision (state, audio members, fixed baselines). The snapshot keeps the previous track
+    inventory and order at the receipt's candidate revision and the supplied UTC capture time. Audio
+    membership comes from ``derive_candidate_checkpoint``. Processing replaces only the target's
+    ``gain_db`` with the requested absolute value; fixed input artifacts, non-target settings and their
+    order are carried over unchanged. No baseline or zero gain is invented. This does not render,
+    accept or compute deltas; an executor must later verify the actual outputs.
     """
-    require_instance(previous, ProjectState, "previous")
-    require_instance(receipt, ExecutionReceipt, "receipt")
-    require_instance(action, Action, "action")
+    require_instance(checkpoint_id, CheckpointId, "checkpoint_id")
     require_utc(captured_at, "captured_at")
-    if receipt.status is not ExecutionStatus.CANDIDATE_READY:
-        raise ValueError(f"candidate derivation requires a CANDIDATE_READY execution, got {receipt.status.name}")
-    if receipt.action_id != action.action_id:
-        raise ValueError(f"receipt is for action {receipt.action_id}, not {action.action_id}")
-    if action.project_id != previous.project_id:
-        raise ValueError(f"action targets project {action.project_id}, previous state is {previous.project_id}")
-    if action.expected_revision != previous.revision:
-        raise ValueError(f"action expects revision {action.expected_revision}, previous state is {previous.revision}")
-    target = action.operation.track_id
-    if not any(gain.track_id == target for gain in previous.processing.track_gains):
-        raise ValueError(f"track {target} has no explicit gain state; no baseline is assumed")
+    validate_gain_execution(previous, receipt, action)
+    if receipt.candidate_revision in previous.known_revisions:
+        raise ValueError(f"candidate revision {receipt.candidate_revision} reuses a locally known revision")
 
     audio = derive_candidate_checkpoint(previous.audio, receipt, checkpoint_id)
     revision = audio.revision
+    target = action.operation.track_id
     snapshot = ProjectSnapshot(previous.project_id, revision, captured_at, previous.snapshot.tracks)
     gains = tuple(
         TrackGainState(gain.track_id, gain.input_artifact, action.operation.value_db)

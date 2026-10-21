@@ -46,6 +46,8 @@ def _check_candidate_state(before: ProjectState, execution: ExecutionReceipt, ca
         )
     if candidate.snapshot.tracks != before.snapshot.tracks:
         raise ValueError("candidate state must keep the before state's complete track inventory and order")
+    if candidate.revision in before.known_revisions:
+        raise ValueError(f"candidate state revision {candidate.revision} reuses a locally known revision")
     expected_audio = derive_candidate_checkpoint(before.audio, execution, candidate.audio.checkpoint_id)
     if candidate.audio != expected_audio:
         raise ValueError(

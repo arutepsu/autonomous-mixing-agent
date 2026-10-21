@@ -105,9 +105,11 @@ def preflight_execution(request: ExecutionRequest) -> PreflightResult:
 
     # 3. candidate identity
     candidate = request.candidate
-    if candidate.revision == state.revision:
+    # Local collision check: current state, audio members' and fixed baselines' production revisions.
+    if candidate.revision in state.known_revisions:
         return reject(
-            PreflightCode.INVALID_CANDIDATE_IDENTITY, f"candidate revision {candidate.revision} is the current revision"
+            PreflightCode.INVALID_CANDIDATE_IDENTITY,
+            f"candidate revision {candidate.revision} reuses a locally known revision",
         )
     baseline_ids = {gain.input_artifact.artifact_id for gain in state.processing.track_gains}
     reused = sorted(

@@ -10,7 +10,7 @@
   3. `preflight_execution(request) -> MetadataReady | PreflightRejected` is pure: it invokes no processor and touches no file. The first failure wins:
      1. `admit_action` is rerun (an earlier admission is not a capability token), and its rejection is kept unchanged under `ADMISSION_REJECTED`; an abstention yields no receipt or invented action ID;
      2. the workspace belongs to this execution (`INVALID_WORKSPACE`);
-     3. the candidate revision is new and the candidate IDs are disjoint from current audio and fixed baselines (`INVALID_CANDIDATE_IDENTITY`);
+     3. the candidate revision is new and the candidate IDs are disjoint from current audio and fixed baselines (`INVALID_CANDIDATE_IDENTITY`); (Clarified 2026-10-21, audit F5: "new" means absent from `ProjectState.known_revisions`, which covers the current revision and the production revisions of audio members and fixed baselines; global uniqueness is deferred to identity allocation and a ledger.)
      4. the recipe equals the snapshot inventory, and the bindings cover it exactly with STEM members of exactly their track (`INVALID_RECIPE_BINDINGS`);
      5. the selected current mix is a MIX member whose contributors equal the recipe's as a set (`INVALID_MIX`);
      6. the target has an explicit gain state (`MISSING_GAIN_STATE`);

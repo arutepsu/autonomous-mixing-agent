@@ -57,6 +57,14 @@ class ArtifactCheckpoint:
     def artifact_ids(self) -> frozenset[ArtifactId]:
         return frozenset(artifact.artifact_id for artifact in self.artifacts)
 
+    @property
+    def known_revisions(self) -> frozenset[Revision]:
+        """Revisions visible in this membership: the state revision and every member's production revision.
+
+        Local collision detection only; it knows nothing about fixed baselines or unseen history.
+        """
+        return frozenset({self.revision, *(artifact.revision for artifact in self.artifacts)})
+
     def artifact_for(self, artifact_id: ArtifactId) -> AudioArtifact | None:
         """Return the recorded member with this ID, or ``None`` if it is not a member."""
         for artifact in self.artifacts:

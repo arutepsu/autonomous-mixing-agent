@@ -1,6 +1,6 @@
 """Cross-record reference check of a correction attempt against its run and decision."""
 
-from autonomous_mixing.domain.action import Action
+from autonomous_mixing.domain.action import Action, validate_gain_execution
 from autonomous_mixing.domain.decision import Decision, ProposeAction
 from autonomous_mixing.domain.project import ProjectState
 from autonomous_mixing.domain.run.attempt import CorrectionAttempt
@@ -69,7 +69,9 @@ def validate_attempt_references(attempt: CorrectionAttempt, run: Run, decision: 
             raise ValueError(
                 f"checkpoint artifact {artifact.artifact_id} uses tracks outside the run scope: {', '.join(outside)}"
             )
-    if attempt.candidate_state is not None:
+    if attempt.candidate_state is not None and attempt.execution is not None:
+        # Manually assembled candidates must also replace exactly the target-dependent artifacts.
+        validate_gain_execution(before, attempt.execution, action)
         _validate_candidate_gain_change(before, attempt.candidate_state, action)
     if attempt.validation is not None:
         validate_validation_references(attempt.validation, configuration.criteria)

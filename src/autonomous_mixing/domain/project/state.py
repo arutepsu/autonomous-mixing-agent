@@ -44,3 +44,13 @@ class ProjectState:
     @property
     def revision(self) -> Revision:
         return self.snapshot.revision
+
+    @property
+    def known_revisions(self) -> frozenset[Revision]:
+        """Locally known revisions: the state revision, audio members' and fixed baselines' production revisions.
+
+        A new candidate state must not reuse any of these. Local collision detection only: global
+        uniqueness and revisions of unseen history need identity allocation and a ledger.
+        """
+        baselines = (gain.input_artifact.revision for gain in self.processing.track_gains)
+        return self.audio.known_revisions | frozenset(baselines)
