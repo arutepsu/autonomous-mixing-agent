@@ -23,6 +23,25 @@ from autonomous_mixing.application.contracts import (
     validate_analysis_response,
     validate_decision_response,
 )
+from autonomous_mixing.application.execution_contracts import (
+    ArtifactProcessingEvidence,
+    CandidateIdentity,
+    ExecutionRequest,
+    ExecutionWorkspace,
+    ProcessedCandidate,
+    ProcessingFailure,
+    ProcessingOutcome,
+    ProcessingPlan,
+    StemBinding,
+    validate_processed_candidate,
+)
+from autonomous_mixing.application.execution_preflight import (
+    MetadataReady,
+    PreflightCode,
+    PreflightRejected,
+    PreflightResult,
+    preflight_execution,
+)
 from autonomous_mixing.application.results import PortFailure, PortFailureCode, PortResult, Success
 
 __all__ = [
@@ -44,4 +63,19 @@ __all__ = [
     "admit_action",
     "validate_analysis_response",
     "validate_decision_response",
+    "CandidateIdentity",
+    "ExecutionRequest",
+    "ExecutionWorkspace",
+    "StemBinding",
+    "ProcessingPlan",
+    "MetadataReady",
+    "PreflightCode",
+    "PreflightRejected",
+    "PreflightResult",
+    "preflight_execution",
+    "ArtifactProcessingEvidence",
+    "ProcessedCandidate",
+    "ProcessingFailure",
+    "ProcessingOutcome",
+    "validate_processed_candidate",
 ]

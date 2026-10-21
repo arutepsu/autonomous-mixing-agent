@@ -265,6 +265,11 @@ def test_recursive_scan_discovers_moved_and_nested_modules():
         f"{DOMAIN}.validation.consistency",
         f"{APPLICATION}.ports.analysis",
         f"{APPLICATION}.ports",
+        # Execution-contract stage (ADR-020).
+        f"{DOMAIN}.project.mix",
+        f"{APPLICATION}.execution_contracts",
+        f"{APPLICATION}.execution_preflight",
+        f"{APPLICATION}.ports.processing",
     ):
         assert expected in names, expected
     assert not [p for p in ALL_MODULES.values() if "__pycache__" in p.parts]

@@ -2,5 +2,6 @@
 
 from autonomous_mixing.application.ports.analysis import AudioAnalyzer
 from autonomous_mixing.application.ports.decision import DecisionController
+from autonomous_mixing.application.ports.processing import AudioProcessor
 
-__all__ = ["AudioAnalyzer", "DecisionController"]
+__all__ = ["AudioAnalyzer", "DecisionController", "AudioProcessor"]

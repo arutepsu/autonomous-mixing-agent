@@ -1,11 +1,13 @@
 """Project component: tracks, snapshots, analysis scopes, artifact metadata, state checkpoints,
-gain processing state and composite project state.
+gain processing state, composite project state and
+full-mix recipes.
 
 Records hold metadata only; no file access, audio loading or alignment inference happens here.
 """
 
 from autonomous_mixing.domain.project.artifacts import ArtifactKind, AudioArtifact
 from autonomous_mixing.domain.project.checkpoint import ArtifactCheckpoint
+from autonomous_mixing.domain.project.mix import MixRecipe, SummingPolicy
 from autonomous_mixing.domain.project.processing import ProjectProcessingState, TrackGainState
 from autonomous_mixing.domain.project.scope import AnalysisScope, FrequencyRange, TimeRange
 from autonomous_mixing.domain.project.snapshot import ProjectSnapshot
@@ -24,4 +26,6 @@ __all__ = [
     "TrackGainState",
     "ProjectProcessingState",
     "ProjectState",
+    "SummingPolicy",
+    "MixRecipe",
 ]

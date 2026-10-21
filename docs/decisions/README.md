@@ -23,6 +23,7 @@ One file per decision, named `NNNN-short-title.md`. Accepted ADRs are not edited
 | [017](0017-domain-component-packages.md) | Domain organized into component packages with enforced dependencies | 2026-10-20 | Proposed |
 | [018](0018-explicit-gain-action-admission-policy.md) | Explicit gain-action admission policy | 2026-10-20 | Proposed |
 | [019](0019-fixed-input-gain-and-composite-project-state.md) | Fixed-input gain semantics and composite project state | 2026-10-21 | Proposed |
+| [020](0020-execution-contracts-and-metadata-preflight.md) | Offline execution contracts and deterministic metadata preflight | 2026-10-21 | Proposed |
 
 ## Template
 

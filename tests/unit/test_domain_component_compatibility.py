@@ -57,6 +57,8 @@ COMPONENT_PUBLIC = {
         # Added by the processing-state migration (ADR-019): new public records, not moved objects.
         "processing": ("TrackGainState", "ProjectProcessingState"),
         "state": ("ProjectState",),
+        # Added by the execution-contract stage (ADR-020): full-mix recipe records.
+        "mix": ("SummingPolicy", "MixRecipe"),
     },
     "context": {
         "assertions": ("AssertionSource", "TrackRole", "ContextPreference"),
@@ -161,9 +163,9 @@ def test_every_previous_root_export_is_the_same_object_as_its_single_owner():
                 assert name not in owners, f"{name} owned twice"
                 owners[name] = package
     assert set(root.__all__) == set(owners)
-    # 76 exports from the component refactor plus three processing-state records and
-    # derive_candidate_project_state (ADR-019).
-    assert len(root.__all__) == 80
+    # 76 exports from the component refactor, plus three processing-state records and
+    # derive_candidate_project_state (ADR-019), plus MixRecipe and SummingPolicy (ADR-020).
+    assert len(root.__all__) == 82
     for name, owner in owners.items():
         assert getattr(root, name) is getattr(owner, name), name
 
