@@ -24,6 +24,7 @@ One file per decision, named `NNNN-short-title.md`. Accepted ADRs are not edited
 | [018](0018-explicit-gain-action-admission-policy.md) | Explicit gain-action admission policy | 2026-10-20 | Proposed |
 | [019](0019-fixed-input-gain-and-composite-project-state.md) | Fixed-input gain semantics and composite project state | 2026-10-21 | Proposed |
 | [020](0020-execution-contracts-and-metadata-preflight.md) | Offline execution contracts and deterministic metadata preflight | 2026-10-21 | Proposed |
+| [021](0021-processing-spec.md) | Explicit processing specification carried through execution contracts | 2026-10-21 | Proposed |
 
 ## Template
 

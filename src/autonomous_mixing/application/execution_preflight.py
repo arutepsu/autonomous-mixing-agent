@@ -203,6 +203,7 @@ def preflight_execution(request: ExecutionRequest) -> PreflightResult:
             current_mix_artifact_id=mix.artifact_id,
             recipe=recipe,
             render_spec=request.render_spec,
+            processing_spec=request.processing_spec,
             workspace=request.workspace,
         )
     )

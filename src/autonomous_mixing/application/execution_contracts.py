@@ -13,7 +13,7 @@ from autonomous_mixing.application.contracts import DecisionRequest
 from autonomous_mixing.domain.action import ExecutionIssue, ExecutionStatus
 from autonomous_mixing.domain.decision import Decision
 from autonomous_mixing.domain.observation import RenderSpec
-from autonomous_mixing.domain.project import ArtifactKind, AudioArtifact, MixRecipe
+from autonomous_mixing.domain.project import ArtifactKind, AudioArtifact, MixRecipe, ProcessingSpec
 from autonomous_mixing.domain.shared import (
     ArtifactId,
     ExecutionId,
@@ -93,6 +93,7 @@ class ExecutionRequest:
     stem_bindings: tuple[StemBinding, ...]
     current_mix_artifact_id: ArtifactId
     render_spec: RenderSpec
+    processing_spec: ProcessingSpec
     workspace: ExecutionWorkspace
     candidate: CandidateIdentity
 
@@ -113,6 +114,7 @@ class ExecutionRequest:
             raise ValueError("ExecutionRequest.stem_bindings must bind each artifact at most once")
         require_instance(self.current_mix_artifact_id, ArtifactId, "ExecutionRequest.current_mix_artifact_id")
         require_instance(self.render_spec, RenderSpec, "ExecutionRequest.render_spec")
+        require_instance(self.processing_spec, ProcessingSpec, "ExecutionRequest.processing_spec")
         require_instance(self.workspace, ExecutionWorkspace, "ExecutionRequest.workspace")
         require_instance(self.candidate, CandidateIdentity, "ExecutionRequest.candidate")
 
@@ -140,6 +142,7 @@ class ProcessingPlan:
     current_mix_artifact_id: ArtifactId
     recipe: MixRecipe
     render_spec: RenderSpec
+    processing_spec: ProcessingSpec
     workspace: ExecutionWorkspace
 
     def __post_init__(self) -> None:
@@ -157,6 +160,7 @@ class ProcessingPlan:
         require_instance(self.current_mix_artifact_id, ArtifactId, "ProcessingPlan.current_mix_artifact_id")
         require_instance(self.recipe, MixRecipe, "ProcessingPlan.recipe")
         require_instance(self.render_spec, RenderSpec, "ProcessingPlan.render_spec")
+        require_instance(self.processing_spec, ProcessingSpec, "ProcessingPlan.processing_spec")
         require_instance(self.workspace, ExecutionWorkspace, "ProcessingPlan.workspace")
 
         if self.workspace.execution_id != self.execution_id:
@@ -185,8 +189,9 @@ class ProcessingPlan:
 class ArtifactProcessingEvidence:
     """Adapter claims about one produced artifact; recorded claims, not independent proof.
 
-    ``processor`` identifies the implementation; it does not imply numerical precision, file
-    subtype or summation order, which the later adapter plan must specify.
+    ``processor`` identifies the implementation; ``processing_spec`` records the numerical and encoding
+    configuration the adapter claims to have used. They are separate, and both are claims until the
+    adapter is implemented and tested.
     """
 
     artifact_id: ArtifactId
@@ -195,6 +200,7 @@ class ArtifactProcessingEvidence:
     finite_samples: bool
     peak_linear: float
     processor: VersionRef
+    processing_spec: ProcessingSpec
 
     def __post_init__(self) -> None:
         require_instance(self.artifact_id, ArtifactId, "ArtifactProcessingEvidence.artifact_id")
@@ -211,6 +217,7 @@ class ArtifactProcessingEvidence:
         if require_finite(self.peak_linear, "ArtifactProcessingEvidence.peak_linear") < 0:
             raise ValueError("ArtifactProcessingEvidence.peak_linear must be non-negative")
         require_instance(self.processor, VersionRef, "ArtifactProcessingEvidence.processor")
+        require_instance(self.processing_spec, ProcessingSpec, "ArtifactProcessingEvidence.processing_spec")
 
 
 @dataclass(frozen=True)
@@ -301,6 +308,9 @@ def validate_processed_candidate(plan: ProcessingPlan, response: ProcessedCandid
             raise ValueError(f"evidence for {record.artifact_id} does not claim verified inputs and finite samples")
     if evidence[target.artifact_id].processor != evidence[mix.artifact_id].processor:
         raise ValueError("both outputs must cite the same processor")
+    for record in evidence.values():
+        if record.processing_spec != plan.processing_spec:  # complete immutable value, not only its reference
+            raise ValueError(f"evidence for {record.artifact_id} records a processing spec different from the plan's")
     if set(evidence[target.artifact_id].verified_input_ids) != {plan.fixed_target_input.artifact_id}:
         raise ValueError("target evidence must cite exactly the fixed target input")
     non_target = {s.artifact_id for s in plan.current_stems if s.artifact_id != plan.target_current_artifact_id}

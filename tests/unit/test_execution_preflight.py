@@ -27,10 +27,17 @@ from autonomous_mixing.domain.project import (
     ArtifactCheckpoint,
     ArtifactKind,
     AudioArtifact,
+    GainRule,
+    LevelPolicy,
     MixRecipe,
+    NumericalPrecision,
+    OutputContainer,
+    ProcessingSpec,
     ProjectProcessingState,
     ProjectSnapshot,
     ProjectState,
+    SampleEncoding,
+    SummationOrder,
     SummingPolicy,
     TimeRange,
     Track,
@@ -173,11 +180,28 @@ def _request(**overrides) -> ExecutionRequest:
         stem_bindings=_bindings(),
         current_mix_artifact_id=ArtifactId("c-mix"),
         render_spec=RenderSpec(VersionRef("render", "1"), 48000, 2),
+        processing_spec=SPEC,
         workspace=ExecutionWorkspace(ExecutionId("e1"), "offline-workspace", "e1_run-01"),
         candidate=CandidateIdentity(Revision("r3"), ArtifactId("c3-t2"), ArtifactId("c3-mix")),
     )
     fields.update(overrides)
     return ExecutionRequest(**fields)
+
+
+def _processing_spec(version: str = "1") -> ProcessingSpec:
+    """Explicit test configuration; no global default specification exists."""
+    return ProcessingSpec(
+        VersionRef("gain-mix-processing", version),
+        NumericalPrecision.FLOAT64,
+        GainRule.DB_AMPLITUDE,
+        SummationOrder.RECIPE_SEQUENTIAL,
+        LevelPolicy.PRESERVE,
+        OutputContainer.WAV,
+        SampleEncoding.FLOAT64,
+    )
+
+
+SPEC = _processing_spec()
 
 
 # --- request records -----------------------------------------------------------------------
@@ -235,6 +259,7 @@ def test_stem_binding_requires_typed_ids():
         {"mix_recipe": (TrackId("t1"),)},
         {"current_mix_artifact_id": "c-mix"},
         {"render_spec": VersionRef("render", "1")},
+        {"processing_spec": VersionRef("gain-mix-processing", "1")},
         {"workspace": "e1_run-01"},
         {"candidate": (Revision("r3"), ArtifactId("c3-t2"), ArtifactId("c3-mix"))},
     ],
@@ -251,6 +276,7 @@ def test_stem_binding_requires_typed_ids():
         "recipe",
         "mix-id",
         "render-spec",
+        "processing-spec",
         "workspace",
         "candidate",
     ],
@@ -657,3 +683,26 @@ def test_candidate_revision_must_not_reuse_a_locally_known_revision(revision):
 def test_genuinely_new_candidate_revision_passes_preflight():
     candidate = CandidateIdentity(Revision("r3"), ArtifactId("c3-t2"), ArtifactId("c3-mix"))
     assert isinstance(preflight_execution(_request(candidate=candidate)), MetadataReady)
+
+
+# --- processing specification propagation ------------------------------------------------------
+
+
+def test_preflight_carries_the_exact_requested_processing_spec():
+    request = _request(processing_spec=_processing_spec("7"))
+    plan = preflight_execution(request).plan
+    assert plan.processing_spec is request.processing_spec
+    assert plan.processing_spec == _processing_spec("7")
+
+
+def test_execution_request_requires_a_processing_spec():
+    fields = {f.name: getattr(_request(), f.name) for f in dataclasses.fields(ExecutionRequest)}
+    del fields["processing_spec"]
+    with pytest.raises(TypeError):
+        ExecutionRequest(**fields)
+
+
+def test_processing_spec_does_not_change_preflight_outcomes():
+    # The specification is carried, not checked: existing rejections and their precedence are unchanged.
+    request = _request(processing_spec=_processing_spec("2"), decision=_decision(3.0))
+    assert preflight_execution(request).code is PreflightCode.ADMISSION_REJECTED

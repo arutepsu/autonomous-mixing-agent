@@ -59,6 +59,16 @@ COMPONENT_PUBLIC = {
         "state": ("ProjectState",),
         # Added by the execution-contract stage (ADR-020): full-mix recipe records.
         "mix": ("SummingPolicy", "MixRecipe"),
+        # Added by the processing-spec stage (ADR-021).
+        "processing_spec": (
+            "ProcessingSpec",
+            "NumericalPrecision",
+            "GainRule",
+            "SummationOrder",
+            "LevelPolicy",
+            "OutputContainer",
+            "SampleEncoding",
+        ),
     },
     "context": {
         "assertions": ("AssertionSource", "TrackRole", "ContextPreference"),
@@ -166,8 +176,8 @@ def test_every_previous_root_export_is_the_same_object_as_its_single_owner():
     assert set(root.__all__) == set(owners)
     # 76 exports from the component refactor, plus three processing-state records and
     # derive_candidate_project_state (ADR-019), plus MixRecipe and SummingPolicy (ADR-020), plus
-    # validate_gain_execution (audit F1 correction).
-    assert len(root.__all__) == 83
+    # validate_gain_execution (audit F1 correction), plus ProcessingSpec and its six enums (ADR-021).
+    assert len(root.__all__) == 90
     for name, owner in owners.items():
         assert getattr(root, name) is getattr(owner, name), name
 
