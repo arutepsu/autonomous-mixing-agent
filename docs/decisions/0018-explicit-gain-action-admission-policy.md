@@ -10,7 +10,7 @@
      5. an explicit permission for the target (`NO_GAIN_PERMISSION`);
      6. `minimum_db <= value_db <= maximum_db` (`OUT_OF_BOUNDS`).
      The requested value is never clamped or rounded. An admitted result carries the original `Action` object and the policy reference.
-  3. The request records check field types only, so reference mismatches surface as typed rejections rather than construction errors.
+  3. The request records check field types only, so reference mismatches surface as typed rejections rather than construction errors. (Clarified 2026-10-21 by [ADR-019](0019-fixed-input-gain-and-composite-project-state.md): the decision request now carries a composite state; the policy project is compared with `state.snapshot`. Decisions, codes and order are unchanged.)
 - Source: owner's Task 3B instruction of 2026-10-20.
 - Rationale: FR-07 requires that non-permitted, out-of-bounds or hard-constraint-violating proposals are rejected with a recorded reason and never executed; FR-11 requires hard producer constraints to be enforced; OP-01 requires that only validated corrections are executed. An explicit, versioned policy with typed rejection codes and a fixed check order makes these decisions deterministic, testable offline (QR-02) and recordable (FR-12).
 - Consequences:

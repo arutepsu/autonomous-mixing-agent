@@ -54,6 +54,9 @@ COMPONENT_PUBLIC = {
         "artifacts": ("AudioArtifact", "ArtifactKind"),
         "checkpoint": ("ArtifactCheckpoint",),
         "scope": ("AnalysisScope", "TimeRange", "FrequencyRange"),
+        # Added by the processing-state migration (ADR-019): new public records, not moved objects.
+        "processing": ("TrackGainState", "ProjectProcessingState"),
+        "state": ("ProjectState",),
     },
     "context": {
         "assertions": ("AssertionSource", "TrackRole", "ContextPreference"),
@@ -92,6 +95,7 @@ COMPONENT_PUBLIC.update(
                 "ExecutionReceipt",
                 "validate_receipt_against_checkpoint",
                 "derive_candidate_checkpoint",
+                "derive_candidate_project_state",  # added by the processing-state migration (ADR-019)
             ),
             "rollback": ("RollbackStatus", "RollbackReceipt", "validate_rollback_references"),
         },
@@ -157,7 +161,9 @@ def test_every_previous_root_export_is_the_same_object_as_its_single_owner():
                 assert name not in owners, f"{name} owned twice"
                 owners[name] = package
     assert set(root.__all__) == set(owners)
-    assert len(root.__all__) == 76
+    # 76 exports from the component refactor plus three processing-state records and
+    # derive_candidate_project_state (ADR-019).
+    assert len(root.__all__) == 80
     for name, owner in owners.items():
         assert getattr(root, name) is getattr(owner, name), name
 
@@ -183,19 +189,22 @@ def _signature(function) -> list[tuple]:
 
 def test_cross_record_and_derivation_signatures_are_preserved():
     from collections.abc import Iterable
+    from datetime import datetime
     from inspect import Parameter
 
     from autonomous_mixing.domain.action import (
+        Action,
         ExecutionReceipt,
         RollbackReceipt,
         derive_candidate_checkpoint,
+        derive_candidate_project_state,
         validate_receipt_against_checkpoint,
         validate_rollback_references,
     )
     from autonomous_mixing.domain.context import MusicalContext
     from autonomous_mixing.domain.decision import Decision, validate_decision_references
     from autonomous_mixing.domain.observation import Observation, validate_observation_sources
-    from autonomous_mixing.domain.project import ArtifactCheckpoint, AudioArtifact, ProjectSnapshot
+    from autonomous_mixing.domain.project import ArtifactCheckpoint, AudioArtifact, ProjectSnapshot, ProjectState
     from autonomous_mixing.domain.run import CorrectionAttempt, Run, validate_attempt_references
     from autonomous_mixing.domain.shared import CheckpointId
     from autonomous_mixing.domain.validation import ValidationCriteria, ValidationResult, validate_validation_references
@@ -219,13 +228,23 @@ def test_cross_record_and_derivation_signatures_are_preserved():
             ("observations", Iterable[Observation]),
         ),
         validate_validation_references: params(("result", ValidationResult), ("criteria", ValidationCriteria)),
-        validate_rollback_references: params(("receipt", RollbackReceipt), ("checkpoint", ArtifactCheckpoint)),
+        # Intentionally changed by the processing-state migration (ADR-019): complete-state rollback.
+        validate_rollback_references: params(("receipt", RollbackReceipt), ("before_state", ProjectState)),
         validate_receipt_against_checkpoint: params(("receipt", ExecutionReceipt), ("before", ArtifactCheckpoint)),
         derive_candidate_checkpoint: params(
             ("previous", ArtifactCheckpoint),
             ("receipt", ExecutionReceipt),
             ("checkpoint_id", CheckpointId),
             returns=ArtifactCheckpoint,
+        ),
+        # New in the processing-state migration (ADR-019).
+        derive_candidate_project_state: params(
+            ("previous", ProjectState),
+            ("receipt", ExecutionReceipt),
+            ("action", Action),
+            ("checkpoint_id", CheckpointId),
+            ("captured_at", datetime),
+            returns=ProjectState,
         ),
         validate_attempt_references: params(("attempt", CorrectionAttempt), ("run", Run), ("decision", Decision)),
     }

@@ -32,9 +32,12 @@ from autonomous_mixing.domain.project import (
     ArtifactCheckpoint,
     ArtifactKind,
     AudioArtifact,
+    ProjectProcessingState,
     ProjectSnapshot,
+    ProjectState,
     TimeRange,
     Track,
+    TrackGainState,
 )
 from autonomous_mixing.domain.run import BudgetLimits, BudgetUsage
 from autonomous_mixing.domain.shared import (
@@ -90,6 +93,18 @@ def _decision_request(protected=frozenset(), roles=None, project="p1", revision=
     snapshot = _snapshot(project, revision)
     mix = _artifact("a-mix", ("t1", "t2", "t3"), revision, project)
     checkpoint = ArtifactCheckpoint(CheckpointId("cp"), ProjectId(project), Revision(revision), (mix,))
+    # Explicit 0 dB gain states on fixed input stems; admission itself never reads processing state.
+    gains = tuple(
+        TrackGainState(
+            TrackId(t),
+            dataclasses.replace(
+                _artifact(f"in-{t}", (t,), "r0", project), kind=ArtifactKind.STEM, source_track_ids=(TrackId(t),)
+            ),
+            0.0,
+        )
+        for t in ("t1", "t2", "t3")
+    )
+    state = ProjectState(snapshot, ProjectProcessingState(ProjectId(project), Revision(revision), gains), checkpoint)
     observation = Observation(
         ObservationId("o1"),
         VersionRef("metric-a", "1"),
@@ -101,11 +116,10 @@ def _decision_request(protected=frozenset(), roles=None, project="p1", revision=
         UTC_NOW,
     )
     return DecisionRequest(
-        snapshot,
+        state,
         _context(protected, roles),
         CONTROLLER,
         (observation,),
-        checkpoint,
         BudgetUsage(1, 0, 1, 0, 2.0),
         BudgetLimits(4, 2, 6, 1, 300.0),
     )

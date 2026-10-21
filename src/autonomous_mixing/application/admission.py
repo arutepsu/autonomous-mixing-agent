@@ -9,7 +9,7 @@ Limits of this check:
   security boundary; no execution service exists yet.
 - Permissions describe configured authorization, not that a future executor supports the
   operation or track.
-- The expected revision is checked against the supplied snapshot only. That does not prove the
+- The expected revision is checked against the supplied state's snapshot only. That does not prove the
   external project state is still current; a future executor must recheck immediately before
   mutation.
 - The requested value is compared with configured absolute bounds only; its meaning relative to
@@ -151,7 +151,7 @@ def admit_action(request: ActionAdmissionRequest) -> AdmissionResult:
     except ValueError as error:  # expected reference failures only; other exceptions propagate
         return reject(AdmissionRejectionCode.INVALID_REFERENCES, f"decision references are invalid: {error}")
 
-    snapshot_project = decision_request.snapshot.project_id
+    snapshot_project = decision_request.state.snapshot.project_id
     if policy.project_id != snapshot_project:
         return reject(
             AdmissionRejectionCode.POLICY_PROJECT_MISMATCH,

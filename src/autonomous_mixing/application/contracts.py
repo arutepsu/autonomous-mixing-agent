@@ -1,7 +1,8 @@
 """Request/response records for the observation and decision ports, with structural checks.
 
-Source artifacts are supplied as an ``ArtifactCheckpoint``: the membership of the observed
-project state. Member artifacts keep their own production revisions (ADR-011, ADR-015).
+Requests carry one composite ``ProjectState`` (ADR-019): its snapshot, gain processing settings and
+audio membership are consistent by construction, so callers cannot pair a snapshot with audio from
+another state. Audio members keep their own production revisions (ADR-011, ADR-015).
 
 These contracts check structure, provenance and completeness only: not numeric correctness,
 perceptual validity, evidence sufficiency, budgets or execution permissions. The decision
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from autonomous_mixing.domain.context import MusicalContext
 from autonomous_mixing.domain.decision import ControllerIdentity, Decision, validate_decision_references
 from autonomous_mixing.domain.observation import AnalysisSpec, Observation, validate_observation_sources
-from autonomous_mixing.domain.project import AnalysisScope, ArtifactCheckpoint, ProjectSnapshot
+from autonomous_mixing.domain.project import AnalysisScope, ProjectState
 from autonomous_mixing.domain.run import BudgetLimits, BudgetUsage
 from autonomous_mixing.domain.shared import VersionRef, require_instance, require_tuple_of
 
@@ -48,23 +49,19 @@ def _require_scope_within(inner: AnalysisScope, outer: AnalysisScope, label: str
 class AnalysisRequest:
     """Request to analyze one project state.
 
-    The checkpoint's state must be the snapshot's; its members need not each cover the whole
-    scope, since different artifacts may serve different metrics. Source coverage is checked
-    per resulting observation.
+    Audio members need not each cover the whole scope, since different artifacts may serve different
+    metrics. Source coverage is checked per resulting observation.
     """
 
-    snapshot: ProjectSnapshot
-    checkpoint: ArtifactCheckpoint
+    state: ProjectState
     scope: AnalysisScope
     specification: AnalysisSpec
 
     def __post_init__(self) -> None:
-        require_instance(self.snapshot, ProjectSnapshot, "AnalysisRequest.snapshot")
-        require_instance(self.checkpoint, ArtifactCheckpoint, "AnalysisRequest.checkpoint")
+        require_instance(self.state, ProjectState, "AnalysisRequest.state")
         require_instance(self.scope, AnalysisScope, "AnalysisRequest.scope")
         require_instance(self.specification, AnalysisSpec, "AnalysisRequest.specification")
-        self.checkpoint.validate_against(self.snapshot)
-        self.scope.validate_against(self.snapshot)
+        self.scope.validate_against(self.state.snapshot)
 
 
 @dataclass(frozen=True)
@@ -86,7 +83,8 @@ def validate_analysis_response(request: AnalysisRequest, response: AnalysisRespo
     seen: set[tuple[VersionRef, AnalysisScope]] = set()
     for observation in response.observations:
         label = f"observation {observation.observation_id}"
-        validate_observation_sources(observation, request.checkpoint.artifacts, request.checkpoint, request.snapshot)
+        audio, snapshot = request.state.audio, request.state.snapshot
+        validate_observation_sources(observation, audio.artifacts, audio, snapshot)
         if observation.analysis_spec != request.specification.ref:
             raise ValueError(f"{label} uses analysis spec {observation.analysis_spec}, not the requested one")
         if observation.metric not in requested:
@@ -112,26 +110,24 @@ class DecisionRequest:
     ordinary runtime source references; this record alone does not sandbox a provider.
     """
 
-    snapshot: ProjectSnapshot
+    state: ProjectState
     context: MusicalContext
     controller: ControllerIdentity
     observations: tuple[Observation, ...]
-    checkpoint: ArtifactCheckpoint
     usage: BudgetUsage
     limits: BudgetLimits
 
     def __post_init__(self) -> None:
-        require_instance(self.snapshot, ProjectSnapshot, "DecisionRequest.snapshot")
+        require_instance(self.state, ProjectState, "DecisionRequest.state")
         require_instance(self.context, MusicalContext, "DecisionRequest.context")
         require_instance(self.controller, ControllerIdentity, "DecisionRequest.controller")
         _require_unique_observations(self.observations, "DecisionRequest.observations")
-        require_instance(self.checkpoint, ArtifactCheckpoint, "DecisionRequest.checkpoint")
         require_instance(self.usage, BudgetUsage, "DecisionRequest.usage")
         require_instance(self.limits, BudgetLimits, "DecisionRequest.limits")
-        self.context.validate_against(self.snapshot)
-        self.checkpoint.validate_against(self.snapshot)
+        snapshot, audio = self.state.snapshot, self.state.audio
+        self.context.validate_against(snapshot)
         for observation in self.observations:
-            validate_observation_sources(observation, self.checkpoint.artifacts, self.checkpoint, self.snapshot)
+            validate_observation_sources(observation, audio.artifacts, audio, snapshot)
 
 
 @dataclass(frozen=True)
@@ -147,7 +143,7 @@ def validate_decision_response(request: DecisionRequest, response: DecisionRespo
     require_instance(request, DecisionRequest, "request")
     require_instance(response, DecisionResponse, "response")
     decision = response.decision
-    validate_decision_references(decision, request.snapshot, request.context, request.observations)
+    validate_decision_references(decision, request.state.snapshot, request.context, request.observations)
     if decision.controller != request.controller:
         raise ValueError(
             f"decision controller {decision.controller.name}@{decision.controller.version} does not match "

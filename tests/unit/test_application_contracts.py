@@ -36,9 +36,12 @@ from autonomous_mixing.domain.project import (
     ArtifactKind,
     AudioArtifact,
     FrequencyRange,
+    ProjectProcessingState,
     ProjectSnapshot,
+    ProjectState,
     TimeRange,
     Track,
+    TrackGainState,
 )
 from autonomous_mixing.domain.run import BudgetLimits, BudgetUsage
 from autonomous_mixing.domain.shared import (
@@ -99,6 +102,21 @@ def _checkpoint(revision: str = "r2", artifacts=None, project: str = "p1") -> Ar
     return ArtifactCheckpoint(CheckpointId("cp2"), ProjectId(project), Revision(revision), artifacts)
 
 
+def _processing(revision: str = "r2", project: str = "p1") -> ProjectProcessingState:
+    # t1's input is the retained a-t1 member; t2's baseline a-t2 was superseded in audio but stays the input.
+    inputs = {"t1": _artifact("a-t1", ("t1",), "r1"), "t2": _artifact("a-t2", ("t2",), "r1")}
+    gains = tuple(TrackGainState(TrackId(t), artifact, -2.0 if t == "t2" else 0.0) for t, artifact in inputs.items())
+    return ProjectProcessingState(ProjectId(project), Revision(revision), gains)
+
+
+def _state(snapshot=None, processing=None, audio=None) -> ProjectState:
+    return ProjectState(
+        snapshot if snapshot is not None else _snapshot(),
+        processing if processing is not None else _processing(),
+        audio if audio is not None else _checkpoint(),
+    )
+
+
 def _scope(tracks=("t1", "t2", "t3"), start=0.0, end=60.0, freq=None) -> AnalysisScope:
     return AnalysisScope(tuple(TrackId(t) for t in tracks), TimeRange(start, end), freq)
 
@@ -124,7 +142,7 @@ def _complete_observations() -> tuple[Observation, ...]:
 
 
 def _analysis_request(**overrides) -> AnalysisRequest:
-    fields = dict(snapshot=_snapshot(), checkpoint=_checkpoint(), scope=_scope(), specification=SPEC)
+    fields = dict(state=_state(), scope=_scope(), specification=SPEC)
     fields.update(overrides)
     return AnalysisRequest(**fields)
 
@@ -137,11 +155,10 @@ def _context(protected: frozenset = frozenset(), context_id: str = "c1") -> Musi
 
 def _decision_request(**overrides) -> DecisionRequest:
     fields = dict(
-        snapshot=_snapshot(),
+        state=_state(),
         context=_context(),
         controller=CONTROLLER,
         observations=_complete_observations(),
-        checkpoint=_checkpoint(),
         usage=BudgetUsage(1, 0, 2, 0, 3.5),
         limits=BudgetLimits(4, 2, 6, 1, 300.0),
     )
@@ -246,43 +263,54 @@ def test_port_failure_holds_only_code_message_and_advisory_flag():
 # --- analysis request ----------------------------------------------------------------
 
 
-def test_analysis_request_accepts_checkpoint_with_mixed_production_revisions():
+def test_analysis_request_accepts_state_with_older_production_artifacts():
     request = _analysis_request()
-    assert {str(a.revision) for a in request.checkpoint.artifacts} == {"r1", "r2"}
-    assert request.checkpoint.revision == request.snapshot.revision
+    assert {str(a.revision) for a in request.state.audio.artifacts} == {"r1", "r2"}
+    assert request.state.audio.revision == request.state.snapshot.revision == request.state.revision
+    # The t2 baseline (produced at r1) is not a current audio member but remains the fixed input.
+    t2_input = request.state.processing.track_gains[1].input_artifact
+    assert t2_input.artifact_id not in request.state.audio.artifact_ids and str(t2_input.revision) == "r1"
+
+
+def test_requests_have_one_state_field_instead_of_snapshot_and_checkpoint():
+    for record in (AnalysisRequest, DecisionRequest):
+        names = {f.name for f in dataclasses.fields(record)}
+        assert "state" in names and not names & {"snapshot", "checkpoint"}
 
 
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"snapshot": "p1@r2"},
-        {"checkpoint": _checkpoint().artifacts},
+        {"state": "p1@r2"},
+        {"state": _checkpoint()},
+        {"state": _snapshot()},
         {"scope": (TrackId("t1"),)},
         {"specification": SPEC.ref},
     ],
-    ids=["snapshot", "checkpoint", "scope", "specification"],
+    ids=["state", "audio-only", "snapshot-only", "scope", "specification"],
 )
 def test_analysis_request_rejects_wrong_types(overrides):
     with pytest.raises(ValueError):
         _analysis_request(**overrides)
 
 
+FOREIGN = _artifact("x", ("t1",), "r2", project="p9")
+
+
 @pytest.mark.parametrize(
-    "overrides, match",
+    "build, match",
     [
-        ({"checkpoint": _checkpoint(revision="r1")}, "revision"),
-        (
-            {"checkpoint": _checkpoint(artifacts=(_artifact("x", ("t1",), "r2", project="p9"),), project="p9")},
-            "project",
-        ),
-        ({"checkpoint": _checkpoint(artifacts=(_artifact("x", ("t9",), "r2"),))}, "t9"),
-        ({"scope": _scope(("t1", "t9"))}, "t9"),
+        (lambda: _analysis_request(state=_state(audio=_checkpoint(revision="r1"))), "revision"),
+        (lambda: _analysis_request(state=_state(processing=_processing(revision="r1"))), "revision"),
+        (lambda: _analysis_request(state=_state(audio=_checkpoint(artifacts=(FOREIGN,), project="p9"))), "project"),
+        (lambda: _analysis_request(state=_state(audio=_checkpoint(artifacts=(_artifact("x", ("t9",), "r2"),)))), "t9"),
+        (lambda: _analysis_request(scope=_scope(("t1", "t9"))), "t9"),
     ],
-    ids=["state-revision", "project", "unknown-artifact-track", "unknown-scope-track"],
+    ids=["audio-revision", "processing-revision", "project", "unknown-artifact-track", "unknown-scope-track"],
 )
-def test_analysis_request_rejects_checkpoint_or_scope_inconsistent_with_snapshot(overrides, match):
+def test_analysis_request_rejects_state_or_scope_inconsistencies(build, match):
     with pytest.raises(ValueError, match=match):
-        _analysis_request(**overrides)
+        build()
 
 
 # --- analysis response ---------------------------------------------------------------
@@ -392,10 +420,10 @@ def test_usage_beyond_limits_remains_representable_in_decision_request():
         {"observations": ("o-a",)},
         {"context": ContextId("c1")},
         {"controller": ("deterministic-baseline", "0.1")},
-        {"checkpoint": _checkpoint().artifacts},
+        {"state": _checkpoint()},
         {"usage": BudgetLimits(4, 2, 6, 1, 300.0)},
         {"limits": BudgetUsage(1, 0, 2, 0, 3.5)},
-        {"snapshot": None},
+        {"state": None},
     ],
     ids=[
         "mutable-observations",
@@ -403,10 +431,10 @@ def test_usage_beyond_limits_remains_representable_in_decision_request():
         "untyped-observations",
         "context",
         "controller",
-        "checkpoint",
+        "audio-only-state",
         "usage",
         "limits",
-        "snapshot",
+        "missing-state",
     ],
 )
 def test_decision_request_rejects_mutable_duplicate_and_wrong_typed_fields(overrides):
@@ -415,17 +443,18 @@ def test_decision_request_rejects_mutable_duplicate_and_wrong_typed_fields(overr
 
 
 @pytest.mark.parametrize(
-    "overrides, match",
+    "build, match",
     [
-        ({"context": _context(protected=frozenset({TrackId("t9")}))}, "t9"),
-        ({"observations": (_observation("o-a", sources=("a-gone",)),)}, "missing"),
-        ({"checkpoint": _checkpoint(revision="r1")}, "revision"),
+        (lambda: _decision_request(context=_context(protected=frozenset({TrackId("t9")}))), "t9"),
+        (lambda: _decision_request(observations=(_observation("o-a", sources=("a-gone",)),)), "missing"),
+        (lambda: _decision_request(state=_state(audio=_checkpoint(revision="r1"))), "revision"),
+        (lambda: _decision_request(state=_state(processing=_processing(revision="r1"))), "revision"),
     ],
-    ids=["context-unknown-track", "observation-source-missing", "checkpoint-state"],
+    ids=["context-unknown-track", "observation-source-missing", "mixed-audio-revision", "mixed-processing-revision"],
 )
-def test_decision_request_rejects_inconsistent_context_sources_and_checkpoint(overrides, match):
+def test_decision_request_rejects_inconsistent_context_sources_and_state(build, match):
     with pytest.raises(ValueError, match=match):
-        _decision_request(**overrides)
+        build()
 
 
 # --- decision response ---------------------------------------------------------------

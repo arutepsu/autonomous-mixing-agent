@@ -6,7 +6,7 @@ All artifacts are metadata fixtures (no files are read or written); values are s
 import dataclasses
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -19,6 +19,7 @@ from autonomous_mixing.domain.action import (
     RollbackStatus,
     SetTrackGain,
     derive_candidate_checkpoint,
+    derive_candidate_project_state,
     validate_rollback_references,
 )
 from autonomous_mixing.domain.context import MusicalContext
@@ -35,9 +36,12 @@ from autonomous_mixing.domain.project import (
     ArtifactCheckpoint,
     ArtifactKind,
     AudioArtifact,
+    ProjectProcessingState,
     ProjectSnapshot,
+    ProjectState,
     TimeRange,
     Track,
+    TrackGainState,
 )
 from autonomous_mixing.domain.run import (
     AttemptDisposition,
@@ -162,9 +166,35 @@ def _receipt(
     )
 
 
+def _snapshot(revision="r1", tracks=("t1", "t2"), project="p1") -> ProjectSnapshot:
+    names = {"t1": "Room", "t2": "Voice", "t3": "Pad", "t4": "Spare"}
+    tracks = tuple(Track(TrackId(t), names[t]) for t in tracks)
+    return ProjectSnapshot(ProjectId(project), Revision(revision), UTC_NOW, tracks)
+
+
+def _state(revision="r1", artifacts=_D, *, cid="cp1", gains=_D, tracks=("t1", "t2")) -> ProjectState:
+    """Complete before state: snapshot, explicit 0 dB gains on the t1/t2 input stems, audio membership."""
+    audio = _checkpoint(revision, artifacts, cid=cid)
+    if gains is _D:
+        inputs = {a.artifact_id: a for a in _checkpoint_artifacts(revision)}
+        gains = tuple(TrackGainState(TrackId(t), inputs[ArtifactId(f"a-{t}")], 0.0) for t in ("t1", "t2"))
+    processing = ProjectProcessingState(ProjectId("p1"), Revision(revision), gains)
+    return ProjectState(_snapshot(revision, tracks), processing, audio)
+
+
+def _action(revision="r1", *, action="x1", target="t2", value_db=-3.0) -> Action:
+    return Action(ActionId(action), ProjectId("p1"), Revision(revision), SetTrackGain(TrackId(target), value_db))
+
+
+def _candidate(state, receipt, action=None, cid="cp2") -> ProjectState:
+    """Explicit test construction of the candidate state a receipt claims (there is no production default)."""
+    action = action or _action(str(state.revision), action=str(receipt.action_id))
+    return derive_candidate_project_state(state, receipt, action, CheckpointId(cid), UTC_NOW + timedelta(minutes=1))
+
+
 def _rollback(status=RollbackStatus.VERIFIED, restored=_D, *, checkpoint="cp1", execution="e1") -> RollbackReceipt:
     if restored is _D:
-        restored = tuple(ArtifactId(a) for a in ("a-t1", "a-t2", "a-mix")) if status is RollbackStatus.VERIFIED else ()
+        restored = _state() if status is RollbackStatus.VERIFIED else None
     return RollbackReceipt(ExecutionId(execution), CheckpointId(checkpoint), status, restored, "restoration checked")
 
 
@@ -214,14 +244,21 @@ def _initial_validation() -> ValidationResult:
     )
 
 
-def _attempt(disposition, execution=None, validation=None, rollback=None, checkpoint=_D, **ids) -> CorrectionAttempt:
+def _attempt(
+    disposition, execution=None, validation=None, rollback=None, state=_D, candidate=_D, **ids
+) -> CorrectionAttempt:
+    before = _state() if state is _D else state
+    if candidate is _D:
+        ready = isinstance(execution, ExecutionReceipt) and execution.status is CR
+        candidate = _candidate(before, execution) if ready else None
     return CorrectionAttempt(
         attempt_id=AttemptId(ids.get("attempt", "att1")),
         run_id=RunId(ids.get("run", "run-1")),
         decision_id=DecisionId(ids.get("decision", "d1")),
         action_id=ActionId(ids.get("action", "x1")),
-        before_checkpoint=_checkpoint() if checkpoint is _D else checkpoint,
+        before_state=before,
         execution=execution,
+        candidate_state=candidate,
         validation=validation,
         rollback=rollback,
         disposition=disposition,
@@ -415,20 +452,21 @@ def test_execution_receipt_rejects_untyped_fields():
 # --- rollback receipts -----------------------------------------------------------
 
 
-def test_verified_rollback_restores_exactly_the_checkpoint_artifacts():
-    validate_rollback_references(_rollback(), _checkpoint())
+def test_verified_rollback_restores_exactly_the_saved_before_state():
+    validate_rollback_references(_rollback(), _state())
 
 
 @pytest.mark.parametrize(
     "status, restored",
     [
-        (RollbackStatus.VERIFIED, ()),
-        (RollbackStatus.FAILED, (ArtifactId("a-t1"),)),
-        (RollbackStatus.UNCERTAIN, (ArtifactId("a-t1"),)),
-        (RollbackStatus.VERIFIED, (ArtifactId("a-t1"), ArtifactId("a-t1"))),
-        (RollbackStatus.VERIFIED, [ArtifactId("a-t1")]),
-        ("VERIFIED", (ArtifactId("a-t1"),)),
+        (RollbackStatus.VERIFIED, None),
+        (RollbackStatus.FAILED, _state()),
+        (RollbackStatus.UNCERTAIN, _state()),
+        (RollbackStatus.VERIFIED, _checkpoint()),
+        (RollbackStatus.VERIFIED, (ArtifactId("a-t1"),)),
+        ("VERIFIED", _state()),
     ],
+    ids=["verified-without-state", "failed-with-state", "uncertain-with-state", "audio-only", "ids-only", "untyped"],
 )
 def test_rollback_receipt_rejects_contradictory_shapes(status, restored):
     with pytest.raises(ValueError):
@@ -437,25 +475,49 @@ def test_rollback_receipt_rejects_contradictory_shapes(status, restored):
 
 def test_rollback_receipt_requires_explanation():
     with pytest.raises(ValueError):
-        RollbackReceipt(ExecutionId("e1"), CheckpointId("cp1"), RollbackStatus.FAILED, (), " ")
+        RollbackReceipt(ExecutionId("e1"), CheckpointId("cp1"), RollbackStatus.FAILED, None, " ")
+
+
+def _with_gain(state, track, gain_db) -> ProjectState:
+    gains = tuple(
+        TrackGainState(g.track_id, g.input_artifact, gain_db) if g.track_id == TrackId(track) else g
+        for g in state.processing.track_gains
+    )
+    return dataclasses.replace(state, processing=dataclasses.replace(state.processing, track_gains=gains))
+
+
+OTHER_MIX = _artifact("c-mix", ("t1", "t2"), kind=ArtifactKind.MIX)
+RECAPTURED = dataclasses.replace(_snapshot(), captured_at=UTC_NOW + timedelta(hours=1))
 
 
 @pytest.mark.parametrize(
-    "receipt, match",
+    "restored, match",
     [
-        (_rollback(restored=(ArtifactId("a-t1"), ArtifactId("a-t2"))), "a-mix"),
-        (_rollback(restored=(ArtifactId("a-t1"), ArtifactId("a-t2"), ArtifactId("a-mix"), ArtifactId("c-t2"))), "c-t2"),
-        (_rollback(checkpoint="cp0"), "checkpoint"),
+        (_with_gain(_state(), "t2", -3.0), "processing"),
+        (_state(artifacts=_checkpoint_artifacts()[:2]), "audio"),
+        (_state(artifacts=(*_checkpoint_artifacts()[:2], OTHER_MIX)), "audio"),
+        (dataclasses.replace(_state(), snapshot=RECAPTURED), "snapshot"),
+    ],
+    ids=[
+        "matching-audio-wrong-settings",
+        "matching-settings-missing-audio",
+        "matching-settings-other-audio",
+        "recaptured",
     ],
 )
-def test_rollback_references_reject_missing_additional_and_mismatched_checkpoint(receipt, match):
+def test_verified_rollback_requires_the_complete_saved_state(restored, match):
     with pytest.raises(ValueError, match=match):
-        validate_rollback_references(receipt, _checkpoint())
+        validate_rollback_references(_rollback(restored=restored), _state())
+
+
+def test_rollback_references_reject_mismatched_checkpoint():
+    with pytest.raises(ValueError, match="checkpoint"):
+        validate_rollback_references(_rollback(checkpoint="cp0"), _state())
 
 
 @pytest.mark.parametrize("status", [RollbackStatus.FAILED, RollbackStatus.UNCERTAIN])
 def test_unsuccessful_rollback_references_need_only_checkpoint_identity(status):
-    validate_rollback_references(_rollback(status), _checkpoint())
+    validate_rollback_references(_rollback(status), _state())
 
 
 # --- correction attempts ---------------------------------------------------------
@@ -497,16 +559,16 @@ def test_every_disposition_has_valid_evidence_shapes(build):
 
 
 @pytest.mark.parametrize(
-    "build",
+    "build, match",
     [
-        lambda: _attempt(D.PENDING, _receipt(CR, action="x2")),
-        lambda: _attempt(D.PENDING, _receipt(CR, project="p2")),
-        lambda: _attempt(D.PENDING, _receipt(CR, before="r0")),
+        (lambda: _attempt(D.PENDING, _receipt(CR, action="x2"), candidate=None), "action"),
+        (lambda: _attempt(D.PENDING, _receipt(CR, project="p2"), candidate=None), "project"),
+        (lambda: _attempt(D.PENDING, _receipt(CR, before="r0"), candidate=None), "revision"),
     ],
     ids=["action", "project", "before-revision"],
 )
-def test_attempt_rejects_receipt_disagreeing_with_attempt_or_checkpoint(build):
-    with pytest.raises(ValueError):
+def test_attempt_rejects_receipt_disagreeing_with_attempt_or_checkpoint(build, match):
+    with pytest.raises(ValueError, match=match):
         build()
 
 
@@ -589,8 +651,8 @@ def test_rolled_back_requires_verified_rollback(build):
         (lambda: _attempt(D.ROLLED_BACK, _receipt(CR), None, _rollback(execution="e9")), "execution"),
         (lambda: _attempt(D.ROLLED_BACK, _receipt(CR), None, _rollback(checkpoint="cp0")), "checkpoint"),
         (
-            lambda: _attempt(D.ROLLED_BACK, _receipt(CR), None, _rollback(restored=(ArtifactId("a-t1"),))),
-            "a-mix",
+            lambda: _attempt(D.ROLLED_BACK, _receipt(CR), None, _rollback(restored=_with_gain(_state(), "t1", -1.0))),
+            "processing",
         ),
     ],
     ids=["without-execution", "execution-mismatch", "checkpoint-mismatch", "incomplete-restoration"],
@@ -634,22 +696,22 @@ def test_attempt_rejects_untyped_fields():
     with pytest.raises(ValueError):
         _attempt("ACCEPTED", _receipt(CR), _validation())
     with pytest.raises(ValueError):
-        _attempt(D.PENDING, checkpoint=_checkpoint_artifacts())
+        _attempt(D.PENDING, state=_checkpoint())
     with pytest.raises(ValueError):
         _attempt(D.PENDING, execution="e1")
 
 
 def test_attempt_records_are_immutable():
     attempt = _attempt(D.ROLLED_BACK, _receipt(CR), _validation(ValidationVerdict.REJECTED), _rollback())
-    assert isinstance(attempt.before_checkpoint.artifacts, tuple)
+    assert isinstance(attempt.before_state.audio.artifacts, tuple)
     assert isinstance(attempt.execution.candidate_artifacts, tuple)
-    assert isinstance(attempt.rollback.restored_artifact_ids, tuple)
+    assert attempt.rollback.restored_state == attempt.before_state
     with pytest.raises(dataclasses.FrozenInstanceError):
         attempt.disposition = D.ACCEPTED
     with pytest.raises(dataclasses.FrozenInstanceError):
         attempt.execution.status = ExecutionStatus.FAILED
     with pytest.raises(dataclasses.FrozenInstanceError):
-        attempt.before_checkpoint.artifacts[0].content_hash = "c" * 64
+        attempt.before_state.audio.artifacts[0].content_hash = "c" * 64
     with pytest.raises(dataclasses.FrozenInstanceError):
         attempt.rollback.status = RollbackStatus.FAILED
 
@@ -662,7 +724,7 @@ def test_attempt_references_accept_matching_run_and_decision():
 
 
 def test_later_attempt_checkpoint_may_differ_from_initial_revision():
-    attempt = _attempt(D.PENDING, _receipt(CR, before="r5"), checkpoint=_checkpoint("r5", cid="cp5"))
+    attempt = _attempt(D.PENDING, _receipt(CR, before="r5"), state=_state("r5", cid="cp5"))
     run = _run()
     assert run.initial_revision == Revision("r1")
     validate_attempt_references(attempt, run, _decision("r5"))
@@ -708,7 +770,7 @@ def test_attempt_references_reject_mismatches(attempt, run, decision, match):
 
 def test_attempt_references_reject_checkpoint_tracks_outside_run_scope():
     artifacts = (_artifact("a-t1"), _artifact("a-t4", ("t4",)))
-    attempt = _attempt(D.PENDING, checkpoint=_checkpoint(artifacts=artifacts))
+    attempt = _attempt(D.PENDING, state=_state(artifacts=artifacts, tracks=("t1", "t2", "t4")))
     with pytest.raises(ValueError, match="t4"):
         validate_attempt_references(attempt, _run(), _decision())
 
@@ -765,7 +827,7 @@ def test_receipt_rejects_invalid_superseded_ids(status, superseded):
 )
 def test_attempt_rejects_superseded_ids_outside_checkpoint_and_reused_candidate_ids(receipt, match):
     with pytest.raises(ValueError, match=match):
-        _attempt(D.PENDING, receipt())
+        _attempt(D.PENDING, receipt(), candidate=None)
     with pytest.raises(ValueError, match=match):
         derive_candidate_checkpoint(_checkpoint(), receipt(), CheckpointId("cp2"))
 
@@ -802,15 +864,16 @@ def test_derivation_requires_matching_project_and_before_revision(receipt):
 
 def test_derivation_does_not_accept_the_attempt():
     attempt = _attempt(D.PENDING, _receipt(CR))
-    derived = derive_candidate_checkpoint(attempt.before_checkpoint, attempt.execution, CheckpointId("cp2"))
+    derived = derive_candidate_checkpoint(attempt.before_state.audio, attempt.execution, CheckpointId("cp2"))
     assert attempt.disposition is D.PENDING
-    assert attempt.before_checkpoint == _checkpoint()
+    assert attempt.before_state.audio == _checkpoint()
     assert isinstance(derived, ArtifactCheckpoint) and not hasattr(derived, "accepted")
 
 
 def test_two_successive_corrections_retain_unchanged_older_artifacts():
     first = _attempt(D.ACCEPTED, _receipt(CR), _validation())
-    cp2 = derive_candidate_checkpoint(first.before_checkpoint, first.execution, CheckpointId("cp2"))
+    state2 = first.candidate_state
+    cp2 = state2.audio
 
     second_receipt = ExecutionReceipt(
         ExecutionId("e2"),
@@ -827,10 +890,13 @@ def test_two_successive_corrections_retain_unchanged_older_artifacts():
         None,
     )
     second = _attempt(
-        D.ACCEPTED, second_receipt, _validation(), checkpoint=cp2, attempt="att2", action="x2", decision="d2"
+        D.ACCEPTED, second_receipt, _validation(), state=state2, attempt="att2", action="x2", decision="d2"
     )
     validate_attempt_references(second, _run(), _decision("r2", action="x2", decision="d2"))
     cp3 = derive_candidate_checkpoint(cp2, second_receipt, CheckpointId("cp3"))
+    assert second.candidate_state.audio.artifacts == cp3.artifacts
+    # The t2 gain stays relative to the original fixed input stem, never to the superseded c-t2 output.
+    assert second.candidate_state.processing.track_gains[1].input_artifact.artifact_id == ArtifactId("a-t2")
 
     assert cp3.revision == Revision("r3")
     assert [(str(a.artifact_id), str(a.revision)) for a in cp3.artifacts] == [
@@ -838,7 +904,7 @@ def test_two_successive_corrections_retain_unchanged_older_artifacts():
         ("c2-t2", "r3"),
         ("c2-mix", "r3"),
     ]
-    assert cp3.artifacts[0] is first.before_checkpoint.artifacts[0]
+    assert cp3.artifacts[0] is first.before_state.audio.artifacts[0]
 
 
 def test_candidate_observation_uses_mixed_production_revision_membership():
@@ -861,6 +927,108 @@ def test_candidate_observation_uses_mixed_production_revision_membership():
     stale = dataclasses.replace(observation, artifact_ids=(ArtifactId("a-t1"), ArtifactId("a-t2")))
     with pytest.raises(ValueError, match="not a member"):
         validate_observation_sources(stale, (_artifact("a-t1"), _artifact("a-t2", ("t2",))), candidate, snapshot)
+
+
+# --- complete candidate states (processing-state migration, ADR-019) ---------------------
+
+
+def _good_candidate() -> ProjectState:
+    return _candidate(_state(), _receipt(CR))
+
+
+def test_candidate_ready_execution_requires_candidate_state_even_when_pending():
+    with pytest.raises(ValueError, match="candidate_state"):
+        _attempt(D.PENDING, _receipt(CR), candidate=None)
+    with pytest.raises(ValueError, match="candidate_state"):
+        _attempt(D.ACCEPTED, _receipt(CR), _validation(), candidate=None)
+
+
+@pytest.mark.parametrize(
+    "execution",
+    [None, _receipt(NS), _receipt(FL), _receipt(UN)],
+    ids=["no-execution", "not-started", "failed", "uncertain"],
+)
+def test_other_execution_statuses_forbid_candidate_state(execution):
+    with pytest.raises(ValueError, match="candidate_state"):
+        _attempt(D.PENDING, execution, candidate=_good_candidate())
+
+
+def _replace_t2_input(state: ProjectState, artifact: AudioArtifact) -> ProjectState:
+    gains = tuple(
+        TrackGainState(g.track_id, artifact, g.gain_db) if g.track_id == TrackId("t2") else g
+        for g in state.processing.track_gains
+    )
+    return dataclasses.replace(state, processing=dataclasses.replace(state.processing, track_gains=gains))
+
+
+R3_RECEIPT = _receipt(
+    CR,
+    Revision("r3"),
+    (_artifact("c-t2", ("t2",), revision="r3"), _artifact("c-mix", ("t1", "t2"), revision="r3", kind=ArtifactKind.MIX)),
+)
+
+
+@pytest.mark.parametrize(
+    "candidate, match",
+    [
+        (lambda: _candidate(_state(), R3_RECEIPT), "revision"),
+        (
+            lambda: dataclasses.replace(
+                _good_candidate(),
+                snapshot=dataclasses.replace(
+                    _good_candidate().snapshot, tracks=_good_candidate().snapshot.tracks[::-1]
+                ),
+            ),
+            "track",
+        ),
+        (
+            lambda: dataclasses.replace(
+                _good_candidate(),
+                audio=ArtifactCheckpoint(
+                    CheckpointId("cp2"), ProjectId("p1"), Revision("r2"), _good_candidate().audio.artifacts[:2]
+                ),
+            ),
+            "audio",
+        ),
+        (lambda: _replace_t2_input(_good_candidate(), _artifact("b-t2", ("t2",), revision="r0")), "input"),
+    ],
+    ids=["candidate-revision", "track-inventory-order", "audio-membership", "changed-baseline"],
+)
+def test_attempt_rejects_candidate_inconsistent_with_receipt_and_before_state(candidate, match):
+    with pytest.raises(ValueError, match=match):
+        _attempt(D.PENDING, _receipt(CR), candidate=candidate())
+
+
+@pytest.mark.parametrize(
+    "candidate, match",
+    [
+        (lambda: _with_gain(_good_candidate(), "t1", -1.0), "t1"),
+        (lambda: _with_gain(_good_candidate(), "t2", -6.0), "gain"),
+    ],
+    ids=["unrelated-track-changed", "wrong-target-gain"],
+)
+def test_attempt_references_require_exactly_the_requested_gain_change(candidate, match):
+    attempt = _attempt(D.ACCEPTED, _receipt(CR), _validation(), candidate=candidate())  # structurally consistent
+    with pytest.raises(ValueError, match=match):
+        validate_attempt_references(attempt, _run(), _decision())
+
+
+def test_attempt_references_require_an_explicit_target_gain_state():
+    t1_input = _checkpoint_artifacts()[0]
+    before = _state(gains=(TrackGainState(TrackId("t1"), t1_input, 0.0),))  # t2 unrepresented
+    receipt = _receipt(CR)
+    audio = derive_candidate_checkpoint(before.audio, receipt, CheckpointId("cp2"))
+    processing = ProjectProcessingState(ProjectId("p1"), Revision("r2"), before.processing.track_gains)
+    candidate = ProjectState(_snapshot("r2"), processing, audio)
+    attempt = _attempt(D.PENDING, receipt, state=before, candidate=candidate)
+    with pytest.raises(ValueError, match="t2"):
+        validate_attempt_references(attempt, _run(), _decision())
+
+
+def test_derived_candidate_passes_attempt_references():
+    attempt = _attempt(D.PENDING, _receipt(CR), candidate=_good_candidate())
+    validate_attempt_references(attempt, _run(), _decision())
+    assert attempt.candidate_state.processing.track_gains[1].gain_db == -3.0
 
 
 # --- dependency boundary ---------------------------------------------------------

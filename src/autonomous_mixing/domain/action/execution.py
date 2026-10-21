@@ -7,11 +7,17 @@ component; this module derives candidate membership from an execution receipt.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
+from autonomous_mixing.domain.action.proposal import Action
 from autonomous_mixing.domain.project import (
     ArtifactCheckpoint,
     AudioArtifact,
+    ProjectProcessingState,
+    ProjectSnapshot,
+    ProjectState,
+    TrackGainState,
 )
 from autonomous_mixing.domain.shared import (
     ActionId,
@@ -23,6 +29,7 @@ from autonomous_mixing.domain.shared import (
     require_instance,
     require_text,
     require_tuple_of,
+    require_utc,
 )
 
 
@@ -162,3 +169,48 @@ def derive_candidate_checkpoint(
     return ArtifactCheckpoint(
         checkpoint_id, previous.project_id, receipt.candidate_revision, retained + receipt.candidate_artifacts
     )
+
+
+def derive_candidate_project_state(
+    previous: ProjectState,
+    receipt: ExecutionReceipt,
+    action: Action,
+    checkpoint_id: CheckpointId,
+    captured_at: datetime,
+) -> ProjectState:
+    """Assemble the complete candidate state claimed by an executed gain action and its receipt.
+
+    The snapshot keeps the previous track inventory and order at the receipt's candidate revision
+    and the supplied UTC capture time. Audio membership comes from ``derive_candidate_checkpoint``.
+    Processing replaces only the target's ``gain_db`` with the requested absolute value; fixed
+    input artifacts, non-target settings and their order are carried over unchanged. A target
+    without an explicit gain state is an error: no baseline or zero gain is invented. This does not
+    render, accept, compute deltas or discover dependent artifacts; an executor must later verify
+    the actual outputs.
+    """
+    require_instance(previous, ProjectState, "previous")
+    require_instance(receipt, ExecutionReceipt, "receipt")
+    require_instance(action, Action, "action")
+    require_utc(captured_at, "captured_at")
+    if receipt.status is not ExecutionStatus.CANDIDATE_READY:
+        raise ValueError(f"candidate derivation requires a CANDIDATE_READY execution, got {receipt.status.name}")
+    if receipt.action_id != action.action_id:
+        raise ValueError(f"receipt is for action {receipt.action_id}, not {action.action_id}")
+    if action.project_id != previous.project_id:
+        raise ValueError(f"action targets project {action.project_id}, previous state is {previous.project_id}")
+    if action.expected_revision != previous.revision:
+        raise ValueError(f"action expects revision {action.expected_revision}, previous state is {previous.revision}")
+    target = action.operation.track_id
+    if not any(gain.track_id == target for gain in previous.processing.track_gains):
+        raise ValueError(f"track {target} has no explicit gain state; no baseline is assumed")
+
+    audio = derive_candidate_checkpoint(previous.audio, receipt, checkpoint_id)
+    revision = audio.revision
+    snapshot = ProjectSnapshot(previous.project_id, revision, captured_at, previous.snapshot.tracks)
+    gains = tuple(
+        TrackGainState(gain.track_id, gain.input_artifact, action.operation.value_db)
+        if gain.track_id == target
+        else gain
+        for gain in previous.processing.track_gains
+    )
+    return ProjectState(snapshot, ProjectProcessingState(previous.project_id, revision, gains), audio)
