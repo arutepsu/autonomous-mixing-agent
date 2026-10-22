@@ -97,3 +97,21 @@
 - Evidence (independent review): 126 test cases in `tests/unit/test_audio_dsp.py` and the full suite of 1,218 tests passed; ruff lint and scoped formatting passed. The tests use synthetic numerical arrays; no perceptual or research-performance result follows from them, and no cross-platform bitwise identity is claimed.
 - Limits: no WAV processing adapter, execution service or connected correction pipeline exists. Array immutability does not establish source-file protection. Audit findings F2 (acceptance evidence tied to the candidate state) and F4 (overwrite protection, workspace confinement) remain open; F3 is narrowed further but not closed (subtype mapping, actual evidence and environment provenance outstanding). Contributes to FR-08, FR-17, QR-01 and QR-02; no requirement status changed.
 - Open: scalar normalization at the future adapter boundary is unresolved, because the domain's `require_finite` accepts `np.float64` and other `int`/`float` subclasses while the kernel accepts only exact built-in `int`/`float`. No test yet enforces the infrastructure package's own import boundary. Left uncommitted for review.
+
+## 2026-10-22 — read-only WAV artifact verifier (infrastructure.audio.verification)
+- Implemented `verify_wav_artifact(artifact, *, max_file_bytes, max_decoded_bytes) -> VerifiedAudio`. It checks one existing file against its `AudioArtifact` metadata.
+  - It accepts only absolute local paths: relative, URI and UNC/network/device forms are rejected lexically.
+  - It checks that the pathname and the opened handle are regular files, opens the file once and captures at most `max_file_bytes + 1` bytes in chunks of at most 1 MiB. The chunk size is an I/O buffer size, not a scientific threshold.
+  - It compares the payload's SHA-256 with `content_hash` before decoding, then decodes the same captured bytes without reopening the path.
+  - The container must be libsndfile WAV/WAVEX/RF64, detected from content rather than the file extension. Declared sample rate, channel count and frame count must match. The decoded-storage limit (frames × channels × 8 bytes) is checked before decoding.
+  - It returns finite native float64 `(frames, channels)` samples, initially read-only, plus the detected container and subtype and the verified hash.
+  - Expected failures raise `ArtifactVerificationError` (a `ValueError` subclass) with a `VerificationFailureCode`.
+- Evidence (independent review): 87 test cases in `tests/unit/test_audio_verification.py` and 1,305 full-suite tests passed with no skips; ruff lint and scoped formatting passed. Tested on Windows with soundfile 0.14.0 (pinned in `uv.lock`) and libsndfile 1.2.2 (per the implementation report). The POSIX `IsADirectoryError` branch and real permission failures were not exercised on a real filesystem; permission failure was exercised only via a test double.
+- Limits:
+  - Only the captured payload's identity is established, not that the pathname is unchanged afterwards. A future processor must consume the verified samples or reverify what it reads.
+  - There is no directory confinement, alias/symlink/reparse-point protection or race-free capture, and no guarantee on total process or decoder memory.
+  - The read-only flag guards against accidental mutation only; it is not a security boundary.
+  - No workspace allocator, WAV writer, processing adapter or connected execution pipeline exists. F2 and F4 remain open, and F3 is not closed.
+  - No perceptual or research-performance result is established.
+  - Contributes to QR-01, QR-02, QR-03, FR-02 and FR-17; no requirement status changed.
+- Open: existing records use relative locations such as `outputs/{id}.wav`, which the verifier rejects. Their explicit resolution is unresolved and recorded under the overview's open questions. Left uncommitted for review.
