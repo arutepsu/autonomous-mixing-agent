@@ -9,14 +9,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from autonomous_mixing.application import (
-    ActionAdmissionPolicy,
+from autonomous_mixing.application.admission import ActionAdmissionPolicy, TrackGainPermission
+from autonomous_mixing.application.decision import DecisionRequest
+from autonomous_mixing.application.execution import (
     CandidateIdentity,
-    DecisionRequest,
     ExecutionRequest,
     ExecutionWorkspace,
     StemBinding,
-    TrackGainPermission,
 )
 from autonomous_mixing.domain.action import Action, SetTrackGain
 from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
@@ -302,15 +301,17 @@ def test_request_construction_does_not_check_cross_record_consistency():
 import copy  # noqa: E402
 import inspect  # noqa: E402
 
-from autonomous_mixing.application import (  # noqa: E402
+from autonomous_mixing.application.admission import (  # noqa: E402
     ActionAdmissionRequest,
     AdmissionRejectionCode,
+    RejectedAction,
+    admit_action,
+)
+from autonomous_mixing.application.execution import (  # noqa: E402
     MetadataReady,
     PreflightCode,
     PreflightRejected,
     ProcessingPlan,
-    RejectedAction,
-    admit_action,
     preflight_execution,
 )
 from autonomous_mixing.domain.decision import Abstain, AbstentionReason  # noqa: E402
@@ -617,7 +618,8 @@ def test_preflight_is_pure_and_invokes_no_processor():
     preflight_execution(_request(decision=_decision(3.0)))
     assert request == before
     assert list(inspect.signature(preflight_execution).parameters) == ["request"]
-    import autonomous_mixing.application.execution_preflight as module
+    # Inspect the implementation module itself; the legacy execution_preflight path is only a re-export shim.
+    import autonomous_mixing.application.execution.preflight as module
 
     source = inspect.getsource(module)
     assert "ports" not in source and "process(" not in source

@@ -270,6 +270,14 @@ def test_recursive_scan_discovers_moved_and_nested_modules():
         f"{APPLICATION}.execution_contracts",
         f"{APPLICATION}.execution_preflight",
         f"{APPLICATION}.ports.processing",
+        # Application component packages; the legacy application modules above remain as facades.
+        f"{APPLICATION}.shared.results",
+        f"{APPLICATION}.observation.contracts",
+        f"{APPLICATION}.decision.validation",
+        f"{APPLICATION}.admission.admission",
+        f"{APPLICATION}.execution.identity",
+        f"{APPLICATION}.execution.preflight",
+        f"{APPLICATION}.execution.ports",
     ):
         assert expected in names, expected
     assert not [p for p in ALL_MODULES.values() if "__pycache__" in p.parts]

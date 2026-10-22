@@ -9,8 +9,9 @@ import math
 
 import pytest
 
-from autonomous_mixing.application import (
+from autonomous_mixing.application.execution import (
     ArtifactProcessingEvidence,
+    AudioProcessor,
     CandidateIdentity,
     ExecutionWorkspace,
     ProcessedCandidate,
@@ -19,7 +20,6 @@ from autonomous_mixing.application import (
     ProcessingPlan,
     validate_processed_candidate,
 )
-from autonomous_mixing.application.ports import AudioProcessor
 from autonomous_mixing.domain.action import ExecutionIssue, ExecutionStatus
 from autonomous_mixing.domain.observation import RenderSpec
 from autonomous_mixing.domain.project import (

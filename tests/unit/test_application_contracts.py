@@ -13,19 +13,19 @@ from pathlib import Path
 
 import pytest
 
-from autonomous_mixing.application import (
-    AnalysisRequest,
-    AnalysisResponse,
+from autonomous_mixing.application.decision import (
+    DecisionController,
     DecisionRequest,
     DecisionResponse,
-    PortFailure,
-    PortFailureCode,
-    PortResult,
-    Success,
-    validate_analysis_response,
     validate_decision_response,
 )
-from autonomous_mixing.application.ports import AudioAnalyzer, DecisionController
+from autonomous_mixing.application.observation import (
+    AnalysisRequest,
+    AnalysisResponse,
+    AudioAnalyzer,
+    validate_analysis_response,
+)
+from autonomous_mixing.application.shared import PortFailure, PortFailureCode, PortResult, Success
 from autonomous_mixing.domain.action import Action, SetTrackGain
 from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
 from autonomous_mixing.domain.decision import Abstain, AbstentionReason, ControllerIdentity, Decision, ProposeAction
@@ -605,6 +605,17 @@ def test_application_modules_import_only_stdlib_domain_and_application():
         "ports/__init__.py",
         "ports/analysis.py",
         "ports/decision.py",
+        # Application component packages; the legacy modules above remain as compatibility facades.
+        "shared/__init__.py",
+        "shared/results.py",
+        "observation/__init__.py",
+        "observation/contracts.py",
+        "observation/validation.py",
+        "observation/ports.py",
+        "decision/__init__.py",
+        "decision/contracts.py",
+        "decision/validation.py",
+        "decision/ports.py",
     }
     for module in modules:
         parts = module.relative_to(SRC_DIR.parent).with_suffix("").parts
@@ -628,7 +639,10 @@ def _modules_loaded_by(import_statement: str) -> list[str]:
 
 
 def test_application_runtime_imports_stay_within_stdlib_domain_and_application():
-    for name in _modules_loaded_by("import autonomous_mixing.application, autonomous_mixing.application.ports"):
+    components = ", ".join(
+        f"{APPLICATION_PACKAGE}.{c}" for c in ("shared", "observation", "decision", "admission", "execution")
+    )
+    for name in _modules_loaded_by(f"import {components}"):
         internal = name == "autonomous_mixing" or any(name == p or name.startswith(p + ".") for p in ALLOWED_INTERNAL)
         assert internal or name.split(".")[0] in sys.stdlib_module_names, name
 

@@ -13,16 +13,16 @@ from pathlib import Path
 
 import pytest
 
-from autonomous_mixing.application import (
+from autonomous_mixing.application.admission import (
     ActionAdmissionPolicy,
     ActionAdmissionRequest,
     AdmissionRejectionCode,
     AdmittedAction,
-    DecisionRequest,
     RejectedAction,
     TrackGainPermission,
     admit_action,
 )
+from autonomous_mixing.application.decision import DecisionRequest
 from autonomous_mixing.domain.action import Action, SetTrackGain
 from autonomous_mixing.domain.context import AssertionSource, MusicalContext, TrackRole
 from autonomous_mixing.domain.decision import Abstain, AbstentionReason, ControllerIdentity, Decision, ProposeAction
@@ -314,7 +314,8 @@ def test_admission_does_not_mutate_request_or_action():
 
 
 def test_programming_errors_are_not_converted_into_rejections(monkeypatch):
-    import autonomous_mixing.application.admission as admission
+    # Patch the global that admit_action actually resolves: its implementation module, not the interface.
+    import autonomous_mixing.application.admission.admission as admission
 
     def broken(request, response):
         raise TypeError("programming error")
@@ -413,10 +414,14 @@ def test_records_are_immutable():
 
 
 def test_admission_module_imports_only_stdlib_application_and_component_interfaces():
-    # The recursive real-tree checks in test_domain_component_boundaries.py also scan this module.
-    path = Path(__file__).resolve().parents[2] / "src" / "autonomous_mixing" / "application" / "admission.py"
+    # The recursive real-tree checks in test_domain_component_boundaries.py and
+    # test_application_infrastructure_boundaries.py also scan this package.
+    package_dir = Path(__file__).resolve().parents[2] / "src" / "autonomous_mixing" / "application" / "admission"
+    paths = sorted(package_dir.glob("*.py"))
+    assert {path.name for path in paths} == {"__init__.py", "policy.py", "contracts.py", "admission.py"}
     components = {"shared", "project", "context", "observation", "action", "decision", "validation", "run"}
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+    nodes = [node for path in paths for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))]
+    for node in nodes:
         if isinstance(node, ast.ImportFrom):
             assert node.level == 0, "use absolute imports"
             name = node.module or ""

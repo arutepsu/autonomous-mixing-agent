@@ -1,16 +1,8 @@
-"""Port for bounded offline gain/full-mix processing."""
+"""Compatibility shim: re-exports ``AudioProcessor`` from ``autonomous_mixing.application.execution``.
 
-from typing import Protocol
+Deprecated import location kept for existing callers. Contains no definitions of its own.
+"""
 
-from autonomous_mixing.application.execution_contracts import ProcessingOutcome, ProcessingPlan
+from autonomous_mixing.application.execution import AudioProcessor
 
-
-class AudioProcessor(Protocol):
-    """Renders a plan's fixed target input at the requested gain and the full mix from current stems.
-
-    Returns a ``ProcessedCandidate`` or a typed ``ProcessingFailure``; callers check candidates with
-    ``validate_processed_candidate``. It must not choose actions, read hidden evaluation data, accept
-    audio or change policy. No implementation exists in the application layer.
-    """
-
-    def process(self, plan: ProcessingPlan) -> ProcessingOutcome: ...
+__all__ = ["AudioProcessor"]

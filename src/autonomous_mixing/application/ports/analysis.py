@@ -1,16 +1,8 @@
-"""Port for obtaining observations of a project state."""
+"""Compatibility shim: re-exports ``AudioAnalyzer`` from ``autonomous_mixing.application.observation``.
 
-from typing import Protocol
+Deprecated import location kept for existing callers. Contains no definitions of its own.
+"""
 
-from autonomous_mixing.application.contracts import AnalysisRequest, AnalysisResponse
-from autonomous_mixing.application.results import PortResult
+from autonomous_mixing.application.observation import AudioAnalyzer
 
-
-class AudioAnalyzer(Protocol):
-    """Analyzes artifacts under a versioned specification into typed observations.
-
-    Implementations return expected failures as ``PortFailure``; callers validate successful
-    responses with ``validate_analysis_response``.
-    """
-
-    def analyze(self, request: AnalysisRequest) -> PortResult[AnalysisResponse]: ...
+__all__ = ["AudioAnalyzer"]
